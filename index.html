@@ -1,0 +1,1140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>OpenFront Lobbies</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0f17;
+        --panel: #121a27;
+        --muted: #93a4be;
+        --text: #e9eef7;
+        --border: rgba(255, 255, 255, 0.08);
+        --border2: rgba(255, 255, 255, 0.12);
+        --accent: #62b0ff;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+header {
+  padding: 10px 12px 0 12px;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px 0 12px;
+  flex-wrap: wrap;
+}
+
+.topbar {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+
+.counts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: auto;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+h1 {
+  font-size: 15px;
+  margin: 0 0 4px 0;
+  font-weight: 800;
+}
+
+.status {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.wrap {
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+}
+.row {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+}
+
+label {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+input,
+button {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 7px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  outline: none;
+  font-size: 11px;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 700;
+  background: rgba(98,176,255,0.10);
+}
+
+      input:focus, button:focus {
+        border-color: rgba(98,176,255,0.60);
+        box-shadow: 0 0 0 3px rgba(98,176,255,0.14);
+      }
+
+      button:hover {
+        border-color: rgba(98,176,255,0.35);
+        background: rgba(98,176,255,0.18);
+      }
+
+
+.modsRow {
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.modBox {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.modTitle {
+  font-size: 10px;
+  font-weight: 800;
+  margin-bottom: 5px;
+}
+
+.triBtns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.triBtn {
+  padding: 4px 4px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  font-weight: 800;
+  font-size: 10px;
+  user-select: none;
+}
+
+      .triBtn.active {
+        border-color: rgba(98,176,255,0.6);
+        background: rgba(98,176,255,0.18);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        table-layout: fixed;
+      }
+
+thead th {
+  text-align: left;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 800;
+  padding: 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+tbody td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  vertical-align: top;
+  font-size: 11px;
+}
+
+th:nth-child(4),
+td:nth-child(4) {
+  width: 340px;
+}
+      tbody tr:hover { background: rgba(255,255,255,0.03); }
+
+      .join a { color: var(--accent); text-decoration: none; font-weight: 900; }
+      .join a:hover { text-decoration: underline; }
+
+      .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+      .tag {
+        font-size: 12px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 2px 8px;
+        background: rgba(255,255,255,0.03);
+      }
+
+
+
+      /* Custom select */
+      .csel {
+        position: relative;
+        width: 100%;
+      }
+
+      .csel button::-ms-expand { display: none; }
+      .csel button::marker { content: ""; }
+
+.csel-trigger {
+  position: relative;
+  width: 100%;
+  text-align: left;
+  font-weight: 700;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border2);
+  padding: 5px 28px 5px 8px;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.csel-opt {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 700;
+  text-align: left;
+  font-size: 11px;
+}
+
+      .csel-trigger::after {
+        content: "";
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        width: 8px;
+        height: 8px;
+        border-right: 2px solid rgba(233,238,247,0.75);
+        border-bottom: 2px solid rgba(233,238,247,0.75);
+        transform: translateY(-60%) rotate(45deg);
+        transition: transform 250ms ease;
+        pointer-events: none;
+      }
+
+      .csel.open .csel-trigger {
+        border-color: rgba(98,176,255,0.55);
+        box-shadow: 0 0 0 3px rgba(98,176,255,0.12);
+      }
+
+      .csel.open .csel-trigger::after {
+        transform: translateY(-40%) rotate(225deg);
+      }
+
+      .csel-list {
+        display: none;
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(100% + 6px);
+        background: #0d1420;
+        border: 1px solid var(--border2);
+        border-radius: 12px;
+        padding: 6px;
+        z-index: 9999;
+        max-height: 320px;
+        overflow: auto;
+      }
+
+      .csel.open .csel-list { display: block; }
+
+
+
+      .csel-opt:hover { background: rgba(255,255,255,0.06); }
+
+      .csel-opt[aria-selected="true"] {
+        background: rgba(98,176,255,0.16);
+        outline: 1px solid rgba(98,176,255,0.35);
+      }
+
+      .csel-sep {
+        margin: 6px 6px;
+        height: 1px;
+        background: rgba(255,255,255,0.06);
+      }
+
+      .csel-group {
+        font-size: 11px;
+        letter-spacing: 0.02em;
+        color: rgba(147,164,190,0.95);
+        font-weight: 900;
+        padding: 8px 10px 4px 10px;
+        text-transform: uppercase;
+      }
+
+      @media (max-width: 980px) {
+        .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .modsRow { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+      }
+
+    </style>
+  </head>
+
+  <body>
+    <header class="topbar">
+        <h1>OpenFront lobbies</h1>
+
+        <div class="status" id="status">connecting…</div>
+
+        <div class="counts">
+          <div>total: <span id="totalCount">0</span></div>
+          <div>shown: <span id="shownCount">0</span></div>
+          <div>serverTime: <span id="serverTime">—</span></div>
+        </div>
+    </header>
+    
+    <div class="wrap">
+      <div class="panel">
+        <div class="row">
+          <div>
+            <label for="worker">Worker</label>
+            <select id="worker" hidden>
+              <option value="w0" selected>w0</option>
+              <option value="w1">w1</option>
+              <option value="w2">w2</option>
+              <option value="w3">w3</option>
+            </select>
+            <div class="csel" data-select="worker"></div>
+          </div>
+          <div>
+            <label for="hideEmpty">Hide empty</label>
+            <select id="hideEmpty" hidden>
+              <option value="no" selected>No</option>
+              <option value="yes">Yes</option>
+            </select>
+            <div class="csel" data-select="hideEmpty"></div>
+          </div>
+          <div>
+            <label for="type">Type</label>
+            <select id="type" hidden>
+              <option value="all" selected>All</option>
+              <option value="ffa">FFA</option>
+              <option value="team">Team</option>
+              <option value="special">Special</option>
+            </select>
+            <div class="csel" data-select="type"></div>
+          </div>
+
+          <div>
+            <label for="teamsFilter">Teams / Format</label>
+            <select id="teamsFilter" hidden>
+              <option value="any" selected>All</option>
+              <option value="format:Duos">Duos (2 per team)</option>
+              <option value="format:Trios">Trios (3 per team)</option>
+              <option value="format:Quads">Quads (4 per team)</option>
+              <option value="teams:2">2 teams</option>
+              <option value="teams:3">3 teams</option>
+              <option value="teams:4">4 teams</option>
+              <option value="teams:5">5 teams</option>
+              <option value="teams:6">6 teams</option>
+              <option value="teams:7">7 teams</option>
+              <option value="teams:8">8 teams</option>
+              <option value="format:HumansVsNations">Humans vs Nations</option>
+            </select>
+            <div class="csel" data-select="teamsFilter"></div>
+          </div>
+
+          <div>
+            <label for="minJoined">Min joined (numClients)</label>
+            <input id="minJoined" type="number" placeholder="(any)" />
+          </div>
+          <div>
+            <label for="maxJoined">Max joined (numClients)</label>
+            <input id="maxJoined" type="number" placeholder="(any)" />
+          </div>
+          <div>
+            <label for="maxPlayersEq">maxPlayers equals</label>
+            <input id="maxPlayersEq" type="number" placeholder="(any)" />
+          </div>
+          <div>
+            <label for="minMaxPlayers">Min maxPlayers</label>
+            <input id="minMaxPlayers" type="number" placeholder="(any)" />
+          </div>
+          <div>
+            <label for="maxMaxPlayers">Max maxPlayers</label>
+            <input id="maxMaxPlayers" type="number" placeholder="(any)" />
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="reset" type="button">Reset</button>
+          </div>
+
+          <div>
+            <label for="sort">Sort</label>
+            <select id="sort" hidden>
+              <option value="players_desc" selected>Players ↓</option>
+              <option value="players_asc">Players ↑</option>
+              <option value="maxPlayers_desc">Max Players ↓</option>
+              <option value="maxPlayers_asc">Max Players ↑</option>
+              <option value="starts_asc">Starts Soonest</option>
+              <option value="map_asc">Map A→Z</option>
+            </select>
+            <div class="csel" data-select="sort"></div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top: 10px">
+          
+        </div>
+
+        <div class="modsRow" id="modFilters"></div>
+      </div>
+
+      <div style="overflow:auto; border-radius:12px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Join</th>
+              <th>Map / Mode</th>
+              <th>GameID</th>
+              <th>Type</th>
+              <th>Players</th>
+              <th>Starts</th>
+              <th>Shown modifiers (true only)</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="7" class="mono">waiting for data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+function getMapThumbnailUrl(mapName) {
+  if (typeof mapName !== "string") mapName = "";
+
+  const slug = mapName
+    .toLowerCase()
+    .replace(/[\s_]/g, "")      // remove spaces/underscores
+    .replace(/[^\w]/g, "");     // remove dots, hyphens, commas, apostrophes, etc.
+
+  return `https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/maps/${slug}/thumbnail.webp`;
+}
+
+
+      const TRI = { ANY: "any", IN: "in", OUT: "out" };
+      const $ = (id) => document.getElementById(id);
+
+      function escapeHtml(s) {
+        return String(s)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function titleCaseWords(s) {
+        return String(s)
+          .trim()
+          .toLowerCase()
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+      }
+
+      function buildCustomSelect(selectEl, host) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "csel-trigger";
+
+        const list = document.createElement("div");
+        list.className = "csel-list";
+        list.setAttribute("role", "listbox");
+
+        function getSelectedOption() {
+          return selectEl.options[selectEl.selectedIndex] || null;
+        }
+
+        function renderButton() {
+          const opt = getSelectedOption();
+          btn.textContent = opt ? opt.textContent : "(select)";
+        }
+
+        function close() {
+          host.classList.remove("open");
+          btn.setAttribute("aria-expanded", "false");
+        }
+
+        function open() {
+          host.classList.add("open");
+          btn.setAttribute("aria-expanded", "true");
+        }
+
+        function toggle() {
+          host.classList.contains("open") ? close() : open();
+        }
+
+        function pick(value) {
+          selectEl.value = value;
+          renderButton();
+          syncSelectedUI();
+          close();
+          selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        function syncSelectedUI() {
+          list.querySelectorAll(".csel-opt").forEach((b) => {
+            b.setAttribute("aria-selected", b.dataset.value === selectEl.value ? "true" : "false");
+          });
+        }
+
+        function addOption(o) {
+          if (!o) return;
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "csel-opt";
+          b.textContent = o.text;
+          b.dataset.value = o.value;
+          b.setAttribute("role", "option");
+          b.setAttribute("aria-selected", o.value === selectEl.value ? "true" : "false");
+          b.addEventListener("click", () => pick(o.value));
+          list.appendChild(b);
+        }
+
+        function addSep() {
+          const s = document.createElement("div");
+          s.className = "csel-sep";
+          list.appendChild(s);
+        }
+
+        function addGroup(name) {
+          const g = document.createElement("div");
+          g.className = "csel-group";
+          g.textContent = name;
+          list.appendChild(g);
+        }
+
+        function addOptionByValue(value) {
+          const opt = Array.from(selectEl.options).find((o) => o.value === value);
+          if (!opt) return;
+          addOption({ value: opt.value, text: opt.textContent });
+        }
+
+        function buildList() {
+          list.innerHTML = "";
+
+          const isTeamsFilter = selectEl.id === "teamsFilter";
+          const isSort = selectEl.id === "sort";
+
+          if (isTeamsFilter) {
+  const addGroup = (name) => {
+    const g = document.createElement("div");
+    g.className = "csel-group";
+    g.textContent = name;
+    list.appendChild(g);
+  };
+  const addSep = () => {
+    const s = document.createElement("div");
+    s.className = "csel-sep";
+    list.appendChild(s);
+  };
+
+  const opts = Array.from(selectEl.options).map((o) => ({
+    value: o.value,
+    text: o.textContent,
+  }));
+
+  const byValue = (v) => opts.find((x) => x.value === v);
+
+  addOption(byValue("any"));
+
+    addSep();
+  addGroup("Per-Team Formats");
+  for (const v of ["format:Duos", "format:Trios", "format:Quads"]) {
+    addOption(byValue(v));
+  }
+
+  addSep();
+  addGroup("Teams (Exact Count)");
+  for (const v of ["teams:2", "teams:3", "teams:4", "teams:5", "teams:6", "teams:7", "teams:8"]) {
+    addOption(byValue(v));
+  }
+
+  addSep();
+  addGroup("Special");
+  addOption(byValue("format:HumansVsNations"));
+
+  return; // IMPORTANT: prevents any other options from being appended
+}
+
+          if (isSort) {
+            addGroup("Players");
+            addOptionByValue("players_desc");
+            addOptionByValue("players_asc");
+            addSep();
+            addGroup("Max Players");
+            addOptionByValue("maxPlayers_desc");
+            addOptionByValue("maxPlayers_asc");
+            addSep();
+            addGroup("Other");
+            addOptionByValue("starts_asc");
+            addOptionByValue("map_asc");
+            return;
+          }
+
+          for (const opt of Array.from(selectEl.options)) {
+            addOption({ value: opt.value, text: opt.textContent });
+          }
+        }
+
+        btn.addEventListener("click", toggle);
+        btn.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") close();
+        });
+
+        host.appendChild(btn);
+        host.appendChild(list);
+
+        renderButton();
+        buildList();
+
+        document.addEventListener("click", (e) => {
+          if (!host.contains(e.target)) close();
+        });
+
+        selectEl.addEventListener("change", () => {
+          renderButton();
+          syncSelectedUI();
+        });
+      }
+
+      function initCustomSelects() {
+        document.querySelectorAll(".csel[data-select]").forEach((host) => {
+          const id = host.getAttribute("data-select");
+          const selectEl = document.getElementById(id);
+          if (!selectEl) return;
+          buildCustomSelect(selectEl, host);
+        });
+      }
+
+      const els = {
+        status: $("status"),
+        worker: $("worker"),
+        type: $("type"),
+        teamsFilter: $("teamsFilter"),
+        hideEmpty: $("hideEmpty"),
+        reset: $("reset"),
+        sort: $("sort"),
+
+        minJoined: $("minJoined"),
+        maxJoined: $("maxJoined"),
+        maxPlayersEq: $("maxPlayersEq"),
+        minMaxPlayers: $("minMaxPlayers"),
+        maxMaxPlayers: $("maxMaxPlayers"),
+
+        modFilters: $("modFilters"),
+        totalCount: $("totalCount"),
+        shownCount: $("shownCount"),
+        serverTime: $("serverTime"),
+        rows: $("rows"),
+      };
+
+      const state = { ws: null, payload: null, tri: new Map() };
+
+      const boolFilters = [
+        { id: "isCompact", label: "Compact", get: (g) => getPmTrue(g, "isCompact") },
+        { id: "isCrowded", label: "Crowded", get: (g) => getPmTrue(g, "isCrowded") },
+        { id: "randomSpawn", label: "Random Spawn", get: (g) => getAnyTrue(g, [["pm", "isRandomSpawn"], ["cfg", "randomSpawn"]]) },
+        { id: "isAlliancesDisabled", label: "Alliances Disabled", get: (g) => getPmTrue(g, "isAlliancesDisabled") },
+        { id: "isNukesDisabled", label: "Nukes Disabled", get: (g) => getPmTrue(g, "isNukesDisabled") },
+        { id: "isPortsDisabled", label: "Ports Disabled", get: (g) => getPmTrue(g, "isPortsDisabled") },
+        { id: "isSAMsDisabled", label: "SAMs Disabled", get: (g) => getPmTrue(g, "isSAMsDisabled") },
+        { id: "waterNukes", label: "Water Nukes", get: (g) => getAnyTrue(g, [["pm", "isWaterNukes"], ["cfg", "waterNukes"]]) },
+        { id: "isPeaceTime", label: "Peace Time", get: (g) => getPmTrue(g, "isPeaceTime") },
+        { id: "isHardNations", label: "Hard Nations", get: (g) => getPmTrue(g, "isHardNations") },
+      ];
+
+      const numExact = [
+        { id: "goldMultiplier_eq_2", label: "Gold Multiplier=2", key: "goldMultiplier", exact: 2 },
+        { id: "startingGold_eq_1000000", label: "Starting Gold=1,000,000", key: "startingGold", exact: 1000000 },
+        { id: "startingGold_eq_5000000", label: "Starting Gold=5,000,000", key: "startingGold", exact: 5000000 },
+        { id: "startingGold_eq_25000000", label: "Starting Gold=25,000,000", key: "startingGold", exact: 25000000 },
+      ];
+
+      function parseNum(v) {
+        if (v === "" || v === null || v === undefined) return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      }
+
+      function getJoinUrl(gameID) {
+        if (!gameID) return "about:blank";
+        return `https://openfront.io/game/${encodeURIComponent(gameID)}`;
+      }
+
+      function getCfg(g) { return g?.gameConfig || null; }
+      function getPm(g) { return g?.gameConfig?.publicGameModifiers || null; }
+
+      function getPmTrue(g, key) {
+        const pm = getPm(g);
+        if (!pm || !(key in pm)) return null;
+        return pm[key] === true;
+      }
+
+      function getAnyTrue(g, sources) {
+        const pm = getPm(g);
+        const cfg = getCfg(g);
+        for (const [where, key] of sources) {
+          const obj = where === "pm" ? pm : cfg;
+          if (!obj || !(key in obj)) continue;
+          if (obj[key] === true) return true;
+        }
+        return null;
+      }
+
+      function getNumber(g, key) {
+        const pm = getPm(g);
+        if (pm && typeof pm[key] === "number") return pm[key];
+        const cfg = getCfg(g);
+        if (cfg && typeof cfg[key] === "number") return cfg[key];
+        return null;
+      }
+
+      function triMatchBool(value, tri) {
+        if (tri === TRI.ANY) return true;
+        if (tri === TRI.IN) return value === true;
+        if (tri === TRI.OUT) return value !== true;
+        return true;
+      }
+
+      function triMatchNumExact(num, tri, exact) {
+        if (tri === TRI.ANY) return true;
+        if (tri === TRI.IN) return num === exact;
+        if (tri === TRI.OUT) return num !== exact;
+        return true;
+      }
+
+      function initTriState() {
+        state.tri.clear();
+        for (const f of boolFilters) state.tri.set(f.id, TRI.ANY);
+        for (const n of numExact) state.tri.set(n.id, TRI.ANY);
+      }
+
+      function setTri(id, value) {
+        state.tri.set(id, value);
+        document.querySelectorAll(`[data-tri="${CSS.escape(id)}"]`).forEach((btn) => {
+          btn.classList.toggle("active", btn.getAttribute("data-val") === value);
+        });
+        render();
+      }
+
+      function triButtonGroup(id) {
+        const cur = state.tri.get(id) || TRI.ANY;
+        const mkBtn = (val, text) =>
+          `<button type="button" class="triBtn ${cur === val ? "active" : ""}" data-tri="${escapeHtml(id)}" data-val="${escapeHtml(val)}">${escapeHtml(text)}</button>`;
+        return `<div class="triBtns">${mkBtn(TRI.ANY, "ANY")}${mkBtn(TRI.IN, "IN")}${mkBtn(TRI.OUT, "OUT")}</div>`;
+      }
+
+      function renderModFiltersUI() {
+        const first = new Set(["isCompact", "isCrowded", "randomSpawn"]);
+        const blocks = [];
+
+        for (const f of boolFilters.filter((x) => first.has(x.id))) {
+          blocks.push(`<div class="modBox"><div class="modTitle mono">${escapeHtml(f.label)}</div>${triButtonGroup(f.id)}</div>`);
+        }
+        for (const n of numExact) {
+          blocks.push(`<div class="modBox"><div class="modTitle mono">${escapeHtml(n.label)}</div>${triButtonGroup(n.id)}</div>`);
+        }
+        for (const f of boolFilters.filter((x) => !first.has(x.id))) {
+          blocks.push(`<div class="modBox"><div class="modTitle mono">${escapeHtml(f.label)}</div>${triButtonGroup(f.id)}</div>`);
+        }
+
+        els.modFilters.innerHTML = blocks.join("");
+        els.modFilters.querySelectorAll("button[data-tri][data-val]").forEach((btn) => {
+          btn.addEventListener("click", () => setTri(btn.getAttribute("data-tri"), btn.getAttribute("data-val")));
+        });
+      }
+
+      function flattenGames(payload) {
+        const out = [];
+        const gamesByType = payload?.games || {};
+        for (const [type, arr] of Object.entries(gamesByType)) {
+          if (!Array.isArray(arr)) continue;
+          for (const g of arr) out.push({ ...g, __type: type });
+        }
+        return out;
+      }
+
+      function getFiltersFromUI() {
+        return {
+          type: els.type.value,
+          hideEmpty: els.hideEmpty.value === "yes",
+          teamsFilter: els.teamsFilter.value,
+          sort: els.sort.value,
+
+          minJoined: parseNum(els.minJoined.value),
+          maxJoined: parseNum(els.maxJoined.value),
+          maxPlayersEq: parseNum(els.maxPlayersEq.value),
+          minMaxPlayers: parseNum(els.minMaxPlayers.value),
+          maxMaxPlayers: parseNum(els.maxMaxPlayers.value),
+        };
+      }
+
+      function normTeamsValue(v) {
+        if (v === null || v === undefined) return null;
+        if (typeof v === "number") return v;
+        return String(v).trim();
+      }
+
+      function matchTeamsFilter(g, teamsFilterValue) {
+        if (teamsFilterValue === "any") return true;
+
+        const teams = normTeamsValue(getCfg(g)?.playerTeams);
+        if (teams === null) return false;
+
+        if (teamsFilterValue.startsWith("teams:")) {
+          const n = Number(teamsFilterValue.split(":")[1]);
+          return typeof teams === "number" && teams === n;
+        }
+
+        if (teamsFilterValue.startsWith("format:")) {
+          const want = teamsFilterValue.split(":")[1];
+          if (typeof teams !== "string") return false;
+
+          const compact = String(teams).replace(/\s+/g, "");
+          const got =
+            compact.toLowerCase() === "humansvsnations" ? "HumansVsNations" :
+            /^duos$/i.test(teams) ? "Duos" :
+            /^trios$/i.test(teams) ? "Trios" :
+            /^quads$/i.test(teams) ? "Quads" :
+            teams;
+
+          return got === want;
+        }
+
+        return true;
+      }
+
+      function matchPlayerFilters(g, f) {
+        const joined = Number(g.numClients ?? 0);
+        const cfg = getCfg(g);
+        const maxPlayers = cfg && typeof cfg.maxPlayers === "number" ? cfg.maxPlayers : null;
+
+        if (f.minJoined !== null && joined < f.minJoined) return false;
+        if (f.maxJoined !== null && joined > f.maxJoined) return false;
+
+        if (f.maxPlayersEq !== null) {
+          if (maxPlayers === null) return false;
+          if (maxPlayers !== f.maxPlayersEq) return false;
+        }
+
+        if (f.minMaxPlayers !== null) {
+          if (maxPlayers === null) return false;
+          if (maxPlayers < f.minMaxPlayers) return false;
+        }
+
+        if (f.maxMaxPlayers !== null) {
+          if (maxPlayers === null) return false;
+          if (maxPlayers > f.maxMaxPlayers) return false;
+        }
+
+        return true;
+      }
+
+      function matchAllFilters(g, f) {
+        if (f.type !== "all" && g.__type !== f.type) return false;
+        if (f.hideEmpty && Number(g.numClients ?? 0) === 0) return false;
+
+        if (!matchTeamsFilter(g, f.teamsFilter)) return false;
+        if (!matchPlayerFilters(g, f)) return false;
+
+        for (const bf of boolFilters) {
+          const tri = state.tri.get(bf.id) || TRI.ANY;
+          if (!triMatchBool(bf.get(g), tri)) return false;
+        }
+
+        for (const nf of numExact) {
+          const tri = state.tri.get(nf.id) || TRI.ANY;
+          if (!triMatchNumExact(getNumber(g, nf.key), tri, nf.exact)) return false;
+        }
+
+        return true;
+      }
+
+      function sortGames(games, sort) {
+        const getMax = (g) => {
+          const n = g?.gameConfig?.maxPlayers;
+          return typeof n === "number" ? n : -1;
+        };
+
+        const cmp =
+          {
+            players_desc: (a, b) => (b.numClients ?? 0) - (a.numClients ?? 0),
+            players_asc: (a, b) => (a.numClients ?? 0) - (b.numClients ?? 0),
+            maxPlayers_desc: (a, b) => getMax(b) - getMax(a),
+            maxPlayers_asc: (a, b) => getMax(a) - getMax(b),
+
+            starts_asc: (a, b) => (a.startsAt ?? Infinity) - (b.startsAt ?? Infinity),
+            map_asc: (a, b) => String(a.gameConfig?.gameMap ?? "").localeCompare(String(b.gameConfig?.gameMap ?? "")),
+          }[sort] || ((a, b) => (b.numClients ?? 0) - (a.numClients ?? 0));
+
+        return games.slice().sort(cmp);
+      }
+
+      function formatDuration(s) {
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        if (m <= 0) return `${r}s`;
+        if (m < 60) return `${m}m ${r}s`;
+        const h = Math.floor(m / 60);
+        const mm = m % 60;
+        return `${h}h ${mm}m`;
+      }
+
+      function formatStarts(g, serverTime) {
+        if (!g.startsAt) return "—";
+        if (!serverTime) return String(g.startsAt);
+        const deltaS = Math.round((g.startsAt - serverTime) / 1000);
+        if (deltaS > 0) return `in ${formatDuration(deltaS)}`;
+        return "started";
+      }
+
+      function typeLabelShort(g) {
+        const t = String(g.__type || "").toLowerCase();
+        if (t === "ffa") return "Free For All";
+        if (t !== "team") return titleCaseWords(t);
+
+        const teams = normTeamsValue(g?.gameConfig?.playerTeams);
+        if (typeof teams === "number" && Number.isFinite(teams)) return `${teams} Teams`;
+
+        const s = String(teams ?? "").trim();
+        if (/^duos$/i.test(s)) return "Duos";
+        if (/^trios$/i.test(s)) return "Trios";
+        if (/^quads$/i.test(s)) return "Quads";
+        if (s.replace(/\s+/g, "").toLowerCase() === "humansvsnations") return "Humans Vs Nations";
+        return s ? titleCaseWords(s) : "Team";
+      }
+
+      function densityLabel(g) {
+        const pm = getPm(g) || {};
+        if (pm.isCrowded === true) return "Crowded";
+        if (pm.isCompact === true) return "Compact";
+        return "Normal";
+      }
+
+      function modeSummaryLine(g) {
+        return `${typeLabelShort(g)} • ${densityLabel(g)}`;
+      }
+
+      function trueOnlyTagsHtml(g) {
+        const cfg = getCfg(g) || {};
+        const pm = getPm(g) || {};
+        const tags = [];
+
+        const push = (s) => tags.push(titleCaseWords(s));
+
+        if (pm.isCompact === true) push("compact");
+        if (pm.isCrowded === true) push("crowded");
+        if (pm.isAlliancesDisabled === true) push("alliances disabled");
+        if (pm.isNukesDisabled === true) push("nukes disabled");
+        if (pm.isPortsDisabled === true) push("ports disabled");
+        if (pm.isSAMsDisabled === true) push("sams disabled");
+        if (pm.isPeaceTime === true) push("peace time");
+        if (pm.isHardNations === true) push("hard nations");
+
+        if (pm.isRandomSpawn === true || cfg.randomSpawn === true) push("random spawn");
+        if (pm.isWaterNukes === true || cfg.waterNukes === true) push("water nukes");
+
+        if (cfg.playerTeams !== undefined && cfg.playerTeams !== null) {
+          tags.push(`PlayerTeams=${titleCaseWords(String(cfg.playerTeams))}`);
+        }
+
+        const sg = getNumber(g, "startingGold");
+        if (Number.isFinite(sg)) tags.push(`StartingGold=${sg}`);
+
+        const gm = getNumber(g, "goldMultiplier");
+        if (Number.isFinite(gm)) tags.push(`GoldMultiplier=${gm}`);
+
+        if (tags.length === 0) return "";
+        return `<div class="tags">${tags.map((t) => `<span class="tag mono">${escapeHtml(t)}</span>`).join("")}</div>`;
+      }
+
+function rowHtml(g, serverTime) {
+  const cfg = getCfg(g) || {};
+  const gameID = g.gameID || "";
+  const joinUrl = getJoinUrl(gameID);
+  const maxPlayers = typeof cfg.maxPlayers === "number" ? cfg.maxPlayers : null;
+const map = String(cfg.gameMap ?? "—");
+const thumbUrl = getMapThumbnailUrl(map);
+
+  return `
+        <tr>
+          <td class="join"><a href="${joinUrl}" target="_blank" rel="noreferrer">Join</a></td>
+
+          <td>
+            <div style="display:flex; align-items:center; gap:10px">
+              <img src="${thumbUrl}" alt="Map" style="width:150px;height:90px;object-fit:cover;flex:0 0 auto;border-radius:10px;box-shadow:0 0 0 1.5px rgba(0,0,0,0.24)" onerror="this.onerror=null;this.src='https://via.placeholder.com/120x72?text=No+map';">
+
+              <div>
+                <b>${escapeHtml(map)}</b>
+                <div class="status">${escapeHtml(modeSummaryLine(g))}</div>
+              </div>
+            </div>
+          </td>
+
+          <td class="mono">${escapeHtml(gameID)}</td>
+
+          <td class="mono">${escapeHtml(titleCaseWords(String(g.__type)))}</td>
+
+          <td class="mono">${escapeHtml(String(g.numClients ?? 0))}${maxPlayers !== null ? "/" + escapeHtml(String(maxPlayers)) : ""}</td>
+
+          <td>
+            <div>${escapeHtml(formatStarts(g, serverTime))}</div>
+            <div class="status mono">${g.startsAt ? escapeHtml(String(g.startsAt)) : ""}</div>
+          </td>
+
+          <td>${trueOnlyTagsHtml(g)}</td>
+        </tr>
+  `;
+}
+
+      function render() {
+        if (!state.payload) return;
+
+        const serverTime = state.payload.serverTime;
+        const games = flattenGames(state.payload);
+
+        els.serverTime.textContent = String(serverTime ?? "—");
+        els.totalCount.textContent = String(games.length);
+
+        const f = getFiltersFromUI();
+        const filtered = games.filter((g) => matchAllFilters(g, f));
+        const sorted = sortGames(filtered, f.sort);
+
+        els.shownCount.textContent = String(sorted.length);
+
+        if (sorted.length === 0) {
+          els.rows.innerHTML = `<tr><td colspan="7" class="mono">no matches</td></tr>`;
+          return;
+        }
+        console.log('Going to render rows:', JSON.stringify(sorted, null, 2));
+        els.rows.innerHTML = sorted.map((g, idx) => {
+          try {
+            return rowHtml(g, serverTime);
+          } catch (e) {
+            console.error('Error rendering row', idx, g, e);
+            return `<tr><td colspan="7" class="mono" style="color:red">Error: ${e.message}</td></tr>`;
+          }
+        }).join("");     
+ }
+
+      function cleanupWs() {
+        if (!state.ws) return;
+        try { state.ws.close(); } catch {}
+        state.ws = null;
+      }
+
+      function connect() {
+        cleanupWs();
+        const worker = els.worker.value || "w0";
+        const url = `wss://openfront.io/${worker}/lobbies`;
+        els.status.textContent = `connecting to ${url} …`;
+
+        const ws = new WebSocket(url);
+        state.ws = ws;
+
+        ws.onopen = () => (els.status.textContent = `connected: ${url}`);
+        ws.onclose = () => (els.status.textContent = `disconnected: ${url}`);
+        ws.onerror = () => (els.status.textContent = `ws error: ${url}`);
+        ws.onmessage = (ev) => {
+          try {
+            state.payload = JSON.parse(ev.data);
+            console.log('Got payload:', state.payload); // <== Add this line
+            render();
+          } catch {}
+        };
+      }
+
+      function wireInputs() {
+        const rerender = () => render();
+
+        [
+          els.type,
+          els.teamsFilter,
+          els.hideEmpty,
+          els.sort,
+          els.minJoined,
+          els.maxJoined,
+          els.maxPlayersEq,
+          els.minMaxPlayers,
+          els.maxMaxPlayers,
+        ].forEach((el) => {
+          el.addEventListener("input", rerender);
+          el.addEventListener("change", rerender);
+        });
+
+        els.worker.addEventListener("change", connect);
+
+        els.reset.addEventListener("click", () => {
+          els.type.value = "all";
+          els.teamsFilter.value = "any";
+          els.hideEmpty.value = "no";
+          els.sort.value = "players_desc";
+
+          els.minJoined.value = "";
+          els.maxJoined.value = "";
+          els.maxPlayersEq.value = "";
+          els.minMaxPlayers.value = "";
+          els.maxMaxPlayers.value = "";
+
+          initTriState();
+          renderModFiltersUI();
+          render();
+
+          els.type.dispatchEvent(new Event("change", { bubbles: true }));
+          els.teamsFilter.dispatchEvent(new Event("change", { bubbles: true }));
+          els.hideEmpty.dispatchEvent(new Event("change", { bubbles: true }));
+          els.sort.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      }
+
+      initCustomSelects();
+      initTriState();
+      renderModFiltersUI();
+      wireInputs();
+      connect();
+    </script>
+  </body>
+</html>
