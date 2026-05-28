@@ -304,6 +304,41 @@ td:nth-child(4) {
         text-transform: uppercase;
       }
 
+
+
+      .alertToggle {
+        width: auto;
+        min-width: 110px;
+        padding: 6px 10px;
+        border-color: rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.05);
+        white-space: nowrap;
+      }
+
+      .alertToggle.on {
+        border-color: rgba(98,176,255,0.7);
+        background: rgba(98,176,255,0.20);
+        color: #ffffff;
+      }
+
+      .alertToggle.flash {
+        animation: alertButtonPulse 700ms ease-in-out 0s 6;
+      }
+
+      tbody tr.newMatchFlash td {
+        animation: newMatchFlash 1400ms ease-in-out 0s 4;
+      }
+
+      @keyframes alertButtonPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(98,176,255,0); }
+        50% { box-shadow: 0 0 0 5px rgba(98,176,255,0.22); }
+      }
+
+      @keyframes newMatchFlash {
+        0%, 100% { background: transparent; }
+        45% { background: rgba(98,176,255,0.20); }
+      }
+
       @media (max-width: 980px) {
         .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .modsRow { grid-template-columns: repeat(1, minmax(0, 1fr)); }
@@ -317,6 +352,8 @@ td:nth-child(4) {
         <h1>OpenFront lobbies</h1>
 
         <div class="status" id="status">connecting…</div>
+
+        <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
 
         <div class="counts">
           <div>total: <span id="totalCount">0</span></div>
@@ -669,9 +706,24 @@ function getMapThumbnailUrl(mapName) {
         shownCount: $("shownCount"),
         serverTime: $("serverTime"),
         rows: $("rows"),
+        alertToggle: $("alertToggle"),
       };
 
-      const state = { ws: null, payload: null, tri: new Map() };
+      const state = {
+        ws: null,
+        payload: null,
+        tri: new Map(),
+
+        alertsEnabled: localStorage.getItem("openfrontAlertsEnabled") === "true",
+        alertPrevIds: new Set(),
+        alertBaselineReady: false,
+        alertLastFilterKey: "",
+        flashIds: new Map(),
+        titleBlinkTimer: null,
+        titleBlinkStopTimer: null,
+        originalTitle: document.title,
+        audioCtx: null,
+      };
 
       const boolFilters = [
         { id: "isCompact", label: "Compact", get: (g) => getPmTrue(g, "isCompact") },
@@ -757,6 +809,7 @@ function getMapThumbnailUrl(mapName) {
         document.querySelectorAll(`[data-tri="${CSS.escape(id)}"]`).forEach((btn) => {
           btn.classList.toggle("active", btn.getAttribute("data-val") === value);
         });
+        resetAlertBaseline();
         render();
       }
 
@@ -811,6 +864,203 @@ function getMapThumbnailUrl(mapName) {
           maxMaxPlayers: parseNum(els.maxMaxPlayers.value),
         };
       }
+
+      function getAlertFilterKey(f) {
+        const triState = Array.from(state.tri.entries()).sort(([a], [b]) => a.localeCompare(b));
+        return JSON.stringify({
+          type: f.type,
+          hideEmpty: f.hideEmpty,
+          teamsFilter: f.teamsFilter,
+          minJoined: f.minJoined,
+          maxJoined: f.maxJoined,
+          maxPlayersEq: f.maxPlayersEq,
+          minMaxPlayers: f.minMaxPlayers,
+          maxMaxPlayers: f.maxMaxPlayers,
+          tri: triState,
+        });
+      }
+
+      function updateAlertToggleUI() {
+        if (!els.alertToggle) return;
+        els.alertToggle.textContent = state.alertsEnabled ? "Alerts: On" : "Alerts: Off";
+        els.alertToggle.classList.toggle("on", state.alertsEnabled);
+      }
+
+      function currentMatchingIdsFromPayload() {
+        if (!state.payload) return new Set();
+        const f = getFiltersFromUI();
+        return new Set(flattenGames(state.payload).filter((g) => matchAllFilters(g, f)).map((g) => String(g.gameID || "")));
+      }
+
+      function resetAlertBaseline() {
+        if (!state.payload) {
+          state.alertPrevIds = new Set();
+          state.alertBaselineReady = false;
+          state.alertLastFilterKey = "";
+          return;
+        }
+
+        const f = getFiltersFromUI();
+        state.alertPrevIds = currentMatchingIdsFromPayload();
+        state.alertBaselineReady = true;
+        state.alertLastFilterKey = getAlertFilterKey(f);
+      }
+
+      async function setAlertsEnabled(enabled) {
+        state.alertsEnabled = enabled;
+        localStorage.setItem("openfrontAlertsEnabled", String(enabled));
+        updateAlertToggleUI();
+
+        if (enabled) {
+          resetAlertBaseline();
+
+          try {
+            state.audioCtx = state.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            if (state.audioCtx.state === "suspended") await state.audioCtx.resume();
+          } catch {}
+
+          if ("Notification" in window && Notification.permission === "default") {
+            try { await Notification.requestPermission(); } catch {}
+          }
+        } else {
+          stopTitleBlink();
+          state.flashIds.clear();
+          render();
+        }
+      }
+
+      function playAlertSound() {
+        if (!state.alertsEnabled) return;
+
+        try {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return;
+
+          const ctx = state.audioCtx || new AudioCtx();
+          state.audioCtx = ctx;
+          if (ctx.state === "suspended") ctx.resume().catch(() => {});
+
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(880, now);
+          osc.frequency.setValueAtTime(660, now + 0.13);
+
+          gain.gain.setValueAtTime(0.0001, now);
+          gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.38);
+        } catch {}
+      }
+
+      function stopTitleBlink() {
+        if (state.titleBlinkTimer) clearInterval(state.titleBlinkTimer);
+        if (state.titleBlinkStopTimer) clearTimeout(state.titleBlinkStopTimer);
+        state.titleBlinkTimer = null;
+        state.titleBlinkStopTimer = null;
+        document.title = state.originalTitle;
+      }
+
+      function startTitleBlink(count) {
+        stopTitleBlink();
+
+        let visible = false;
+        state.titleBlinkTimer = setInterval(() => {
+          visible = !visible;
+          document.title = visible ? `(${count}) New OpenFront match!` : state.originalTitle;
+        }, 800);
+
+        state.titleBlinkStopTimer = setTimeout(stopTitleBlink, 10000);
+      }
+
+      function showDesktopNotification(newGames) {
+        if (!state.alertsEnabled) return;
+        if (!("Notification" in window)) return;
+        if (Notification.permission !== "granted") return;
+
+        const first = newGames[0];
+        const cfg = getCfg(first) || {};
+        const maxPlayers = typeof cfg.maxPlayers === "number" ? `/${cfg.maxPlayers}` : "";
+        const body = newGames.length === 1
+          ? `${cfg.gameMap ?? "Unknown map"} • ${first.numClients ?? 0}${maxPlayers} players • ${typeLabelShort(first)}`
+          : `${newGames.length} new lobbies match your filters`;
+
+        try {
+          const n = new Notification("OpenFront lobby match", {
+            body,
+            tag: "openfront-lobby-match",
+            renotify: true,
+          });
+
+          n.onclick = () => {
+            window.focus();
+            if (first?.gameID) window.open(getJoinUrl(first.gameID), "_blank", "noreferrer");
+            n.close();
+          };
+        } catch {}
+      }
+
+      function markNewMatches(newGames) {
+        const until = Date.now() + 9000;
+        for (const g of newGames) {
+          if (g.gameID) state.flashIds.set(String(g.gameID), until);
+        }
+
+        if (els.alertToggle) {
+          els.alertToggle.classList.remove("flash");
+          void els.alertToggle.offsetWidth;
+          els.alertToggle.classList.add("flash");
+          setTimeout(() => els.alertToggle.classList.remove("flash"), 4500);
+        }
+      }
+
+      function cleanupFlashIds() {
+        const now = Date.now();
+        for (const [id, until] of state.flashIds.entries()) {
+          if (until <= now) state.flashIds.delete(id);
+        }
+      }
+
+      function handleNewMatchingGames(sortedGames, f) {
+        const filterKey = getAlertFilterKey(f);
+        const currentIds = new Set(sortedGames.map((g) => String(g.gameID || "")));
+
+        if (!state.alertsEnabled) {
+          state.alertPrevIds = currentIds;
+          state.alertBaselineReady = true;
+          state.alertLastFilterKey = filterKey;
+          return;
+        }
+
+        if (!state.alertBaselineReady || state.alertLastFilterKey !== filterKey) {
+          state.alertPrevIds = currentIds;
+          state.alertBaselineReady = true;
+          state.alertLastFilterKey = filterKey;
+          return;
+        }
+
+        const newGames = sortedGames.filter((g) => {
+          const id = String(g.gameID || "");
+          return id && !state.alertPrevIds.has(id);
+        });
+
+        state.alertPrevIds = currentIds;
+        state.alertLastFilterKey = filterKey;
+
+        if (newGames.length === 0) return;
+
+        markNewMatches(newGames);
+        playAlertSound();
+        startTitleBlink(newGames.length);
+        showDesktopNotification(newGames);
+      }
+
 
       function normTeamsValue(v) {
         if (v === null || v === undefined) return null;
@@ -998,9 +1248,10 @@ function rowHtml(g, serverTime) {
   const maxPlayers = typeof cfg.maxPlayers === "number" ? cfg.maxPlayers : null;
 const map = String(cfg.gameMap ?? "—");
 const thumbUrl = getMapThumbnailUrl(map);
+const isNewMatchFlash = state.flashIds.has(String(gameID));
 
   return `
-        <tr>
+        <tr class="${isNewMatchFlash ? "newMatchFlash" : ""}">
           <td class="join"><a href="${joinUrl}" target="_blank" rel="noreferrer">Join</a></td>
 
           <td>
@@ -1033,6 +1284,8 @@ const thumbUrl = getMapThumbnailUrl(map);
       function render() {
         if (!state.payload) return;
 
+        cleanupFlashIds();
+
         const serverTime = state.payload.serverTime;
         const games = flattenGames(state.payload);
 
@@ -1042,6 +1295,8 @@ const thumbUrl = getMapThumbnailUrl(map);
         const f = getFiltersFromUI();
         const filtered = games.filter((g) => matchAllFilters(g, f));
         const sorted = sortGames(filtered, f.sort);
+
+        handleNewMatchingGames(sorted, f);
 
         els.shownCount.textContent = String(sorted.length);
 
@@ -1089,23 +1344,37 @@ const thumbUrl = getMapThumbnailUrl(map);
 
       function wireInputs() {
         const rerender = () => render();
+        const refilter = () => {
+          resetAlertBaseline();
+          render();
+        };
 
         [
           els.type,
           els.teamsFilter,
           els.hideEmpty,
-          els.sort,
           els.minJoined,
           els.maxJoined,
           els.maxPlayersEq,
           els.minMaxPlayers,
           els.maxMaxPlayers,
         ].forEach((el) => {
-          el.addEventListener("input", rerender);
-          el.addEventListener("change", rerender);
+          el.addEventListener("input", refilter);
+          el.addEventListener("change", refilter);
         });
 
-        els.worker.addEventListener("change", connect);
+        els.sort.addEventListener("input", rerender);
+        els.sort.addEventListener("change", rerender);
+
+        els.worker.addEventListener("change", () => {
+          state.alertBaselineReady = false;
+          state.alertPrevIds = new Set();
+          connect();
+        });
+
+        els.alertToggle.addEventListener("click", () => {
+          setAlertsEnabled(!state.alertsEnabled);
+        });
 
         els.reset.addEventListener("click", () => {
           els.type.value = "all";
@@ -1121,6 +1390,7 @@ const thumbUrl = getMapThumbnailUrl(map);
 
           initTriState();
           renderModFiltersUI();
+          resetAlertBaseline();
           render();
 
           els.type.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1134,6 +1404,7 @@ const thumbUrl = getMapThumbnailUrl(map);
       initTriState();
       renderModFiltersUI();
       wireInputs();
+      updateAlertToggleUI();
       connect();
     </script>
   </body>
