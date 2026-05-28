@@ -184,10 +184,7 @@ tbody td {
   font-size: 11px;
 }
 
-th:nth-child(4),
-td:nth-child(4) {
-  width: 340px;
-}
+
       tbody tr:hover { background: rgba(255,255,255,0.03); }
 
       .join a { color: var(--accent); text-decoration: none; font-weight: 900; }
@@ -343,14 +340,35 @@ td:nth-child(4) {
         .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .modsRow { grid-template-columns: repeat(1, minmax(0, 1fr)); }
       }
+      .discord-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: #5865f2;
+  color: white;
+  text-decoration: none;
+  font-weight: 800;
+  border: 0;
+}
 
+.discord-btn:hover {
+  opacity: 0.85;
+}
+
+.discord-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
     </style>
   </head>
 
   <body>
     <header class="topbar">
         <h1>OpenFront lobbies</h1>
-
         <div class="status" id="status">connecting…</div>
 
         <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
@@ -359,7 +377,15 @@ td:nth-child(4) {
           <div>total: <span id="totalCount">0</span></div>
           <div>shown: <span id="shownCount">0</span></div>
           <div>serverTime: <span id="serverTime">—</span></div>
+          <p>&copy; 2026 kale. All rights reserved.</p>
         </div>
+        <a class="discord-btn" href="https://discord.com/users/622431947339202561" target="_blank" rel="noreferrer">
+          <img
+            class="discord-icon"
+            src="https://cdn.simpleicons.org/discord/white"
+            alt="Discord"
+          />
+        </a>
     </header>
     
     <div class="wrap">
