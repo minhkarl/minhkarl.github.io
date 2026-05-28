@@ -810,6 +810,42 @@ function getMapThumbnailUrl(mapName) {
         if (cfg && typeof cfg[key] === "number") return cfg[key];
         return null;
       }
+      function getFirstNumber(...values) {
+  for (const v of values) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+function getNationsAmount(g) {
+  const cfg = g?.gameConfig || {};
+  const pm = cfg?.publicGameModifiers || {};
+
+  return getFirstNumber(
+    pm.numNations,
+    pm.nations,
+    pm.nationCount,
+    cfg.numNations,
+    cfg.nations,
+    cfg.nationCount,
+    cfg.maxNations
+  );
+}
+
+function getBotsAmount(g) {
+  const cfg = g?.gameConfig || {};
+  const pm = cfg?.publicGameModifiers || {};
+
+  return getFirstNumber(
+    pm.numBots,
+    pm.bots,
+    pm.botCount,
+    cfg.numBots,
+    cfg.bots,
+    cfg.botCount,
+    cfg.maxBots
+  );
+}
 
       function triMatchBool(value, tri) {
         if (tri === TRI.ANY) return true;
@@ -1263,7 +1299,11 @@ function getMapThumbnailUrl(mapName) {
 
         const gm = getNumber(g, "goldMultiplier");
         if (Number.isFinite(gm)) tags.push(`GoldMultiplier=${gm}`);
+        const nations = getNationsAmount(g);
+if (nations !== null) tags.push(`Nations=${nations}`);
 
+const bots = getBotsAmount(g);
+if (bots !== null) tags.push(`Bots=${bots}`);
         if (tags.length === 0) return "";
         return `<div class="tags">${tags.map((t) => `<span class="tag mono">${escapeHtml(t)}</span>`).join("")}</div>`;
       }
