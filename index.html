@@ -94,6 +94,7 @@ label {
 }
 
 input,
+select,
 button {
   width: 100%;
   box-sizing: border-box;
@@ -112,7 +113,7 @@ button {
   background: rgba(98,176,255,0.10);
 }
 
-      input:focus, button:focus {
+      input:focus, select:focus, button:focus {
         border-color: rgba(98,176,255,0.60);
         box-shadow: 0 0 0 3px rgba(98,176,255,0.14);
       }
@@ -122,6 +123,28 @@ button {
         background: rgba(98,176,255,0.18);
       }
 
+
+
+
+.profileRow {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: minmax(130px, 1.4fr) minmax(160px, 1.8fr) repeat(2, minmax(72px, 0.7fr));
+  gap: 6px;
+  align-items: end;
+}
+
+@media (max-width: 700px) {
+  .profileRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.profileHint {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
 
 .modsRow {
   margin-top: 6px;
@@ -144,7 +167,7 @@ button {
 
 .triBtns {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
 }
 
@@ -192,8 +215,29 @@ tbody td {
 
       tbody tr:hover { background: rgba(255,255,255,0.03); }
 
-      .join a { color: var(--accent); text-decoration: none; font-weight: 900; }
-      .join a:hover { text-decoration: underline; }
+      .joinActions {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        flex-wrap: wrap;
+      }
+
+      .actionLink,
+      .actionLink:visited {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 900;
+        white-space: nowrap;
+      }
+
+      .actionLink:hover {
+        text-decoration: underline;
+      }
+
+      .actionLink.clicked,
+      .actionLink.clicked:visited {
+        color: #8cc9ff;
+      }
 
       .tags { display: flex; flex-wrap: wrap; gap: 6px; }
 
@@ -289,6 +333,11 @@ tbody td {
       .csel-opt[aria-selected="true"] {
         background: rgba(98,176,255,0.16);
         outline: 1px solid rgba(98,176,255,0.35);
+      }
+
+      .csel[data-select="teamsFilter"] .csel-opt[aria-selected="true"]::before,
+      .csel[data-select="profileSelect"] .csel-opt[aria-selected="true"]::before {
+        content: "✓ ";
       }
 
       .csel-sep {
@@ -416,7 +465,6 @@ tbody td {
               <option value="all" selected>All</option>
               <option value="ffa">FFA</option>
               <option value="team">Team</option>
-              <option value="special">Special</option>
             </select>
             <div class="csel" data-select="type"></div>
           </div>
@@ -483,6 +531,27 @@ tbody td {
           
         </div>
 
+        <div class="profileRow">
+          <div>
+            <label for="profileName">Profile name</label>
+            <input id="profileName" type="text" placeholder="e.g. Big team games" />
+          </div>
+          <div>
+            <label for="profileSelect">Active profiles</label>
+            <select id="profileSelect" hidden multiple></select>
+            <div class="csel" data-select="profileSelect"></div>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="profileSave" type="button">Save</button>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="profileDelete" type="button">Delete</button>
+          </div>
+        </div>
+        <div class="profileHint">Click profiles to load them instantly. Multiple active profiles are ORed. Clear them to use the filters manually.</div>
+
         <div class="modsRow" id="modFilters"></div>
       </div>
 
@@ -507,21 +576,28 @@ tbody td {
     </div>
 
     <script>
-function getMapThumbnailUrl(mapName) {
-  if (typeof mapName !== "string") mapName = "";
-
-  const slug = mapName
-    .toLowerCase()
-    .replace(/[\s_]/g, "")      // remove spaces/underscores
-    .replace(/[^\w]/g, "");     // remove dots, hyphens, commas, apostrophes, etc.
-
-  return `https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/maps/${slug}/thumbnail.webp`;
-}
-
-
-      const TRI = { ANY: "any", IN: "in", OUT: "out" };
+      const DEBUG = false;
+      const debugLog = (...args) => {
+        if (DEBUG) console.log(...args);
+      };
+      const debugError = (...args) => {
+        if (DEBUG) console.error(...args);
+      };
+      
+      function getMapThumbnailUrl(mapName) {
+        if (typeof mapName !== "string") mapName = "";
+      
+        const slug = mapName
+          .toLowerCase()
+          .replace(/[\s_]/g, "")
+          .replace(/[^\w]/g, "");
+      
+        return `https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/maps/${slug}/thumbnail.webp`;
+      }
+      
+      const TRI = { ANY: "any", IN: "in", NEED: "need", OUT: "out" };
       const $ = (id) => document.getElementById(id);
-
+      
       function escapeHtml(s) {
         return String(s)
           .replaceAll("&", "&amp;")
@@ -530,28 +606,71 @@ function getMapThumbnailUrl(mapName) {
           .replaceAll('"', "&quot;")
           .replaceAll("'", "&#039;");
       }
-
+      
       function titleCaseWords(s) {
         return String(s)
           .trim()
           .toLowerCase()
           .replace(/\b\w/g, (c) => c.toUpperCase());
       }
-
+      
       function buildCustomSelect(selectEl, host) {
+        const isTeamsFilter = selectEl.id === "teamsFilter";
+        const isProfileSelect = selectEl.id === "profileSelect";
+        const isMulti = isTeamsFilter || isProfileSelect;
+
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "csel-trigger";
+        btn.setAttribute("aria-expanded", "false");
 
         const list = document.createElement("div");
         list.className = "csel-list";
         list.setAttribute("role", "listbox");
+        if (isMulti) list.setAttribute("aria-multiselectable", "true");
 
         function getSelectedOption() {
           return selectEl.options[selectEl.selectedIndex] || null;
         }
 
+        function getTeamsFilterValues() {
+          const values = Array.from(state.teamFilters || []);
+          return values.includes("any") ? [] : values;
+        }
+
+        function getProfileValues() {
+          return Array.from(state.activeProfiles || []);
+        }
+
         function renderButton() {
+          if (isTeamsFilter) {
+            const selected = getTeamsFilterValues();
+            if (selected.length === 0) {
+              btn.textContent = "All";
+              return;
+            }
+
+            if (selected.length <= 2) {
+              btn.textContent = selected
+                .map((v) => selectEl.querySelector(`option[value="${CSS.escape(v)}"]`)?.textContent || v)
+                .join(", ");
+              return;
+            }
+
+            btn.textContent = `${selected.length} selected`;
+            return;
+          }
+
+          if (isProfileSelect) {
+            const selected = getProfileValues();
+            if (selected.length === 0) {
+              btn.textContent = "Manual filters";
+              return;
+            }
+            btn.textContent = selected.length <= 2 ? selected.join(", ") : `${selected.length} profiles`;
+            return;
+          }
+
           const opt = getSelectedOption();
           btn.textContent = opt ? opt.textContent : "(select)";
         }
@@ -570,7 +689,68 @@ function getMapThumbnailUrl(mapName) {
           host.classList.contains("open") ? close() : open();
         }
 
+        function syncProfileNativeSelect() {
+          if (!isProfileSelect) return;
+          for (const option of selectEl.options) {
+            option.selected = state.activeProfiles.has(option.value);
+          }
+        }
+
         function pick(value) {
+          if (isTeamsFilter) {
+            if (value === "any") {
+              state.teamFilters = new Set(["any"]);
+              selectEl.value = "any";
+            } else {
+              if (state.teamFilters.has(value)) state.teamFilters.delete(value);
+              else state.teamFilters.add(value);
+
+              state.teamFilters.delete("any");
+              if (state.teamFilters.size === 0) state.teamFilters.add("any");
+              selectEl.value = Array.from(state.teamFilters)[0] || "any";
+            }
+
+            renderButton();
+            syncSelectedUI();
+            selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+            return;
+          }
+
+          if (isProfileSelect) {
+            if (value === "__manual__") {
+              clearActiveProfiles();
+            } else if (state.activeProfiles.has(value)) {
+              state.activeProfiles.delete(value);
+              state.profileSelectionOrder = state.profileSelectionOrder.filter((name) => name !== value);
+              saveActiveProfileNames();
+
+              const lastName = state.profileSelectionOrder.at(-1);
+              const lastProfile = getStoredProfiles().find((p) => p?.name === lastName);
+              if (lastProfile) {
+                els.profileName.value = lastProfile.name;
+                applyProfileSnapshot(lastProfile.filters);
+              }
+            } else {
+              const profile = getStoredProfiles().find((p) => p?.name === value);
+              if (!profile) return;
+
+              state.activeProfiles.add(value);
+              state.profileSelectionOrder = state.profileSelectionOrder.filter((name) => name !== value);
+              state.profileSelectionOrder.push(value);
+              saveActiveProfileNames();
+
+              els.profileName.value = profile.name;
+              applyProfileSnapshot(profile.filters);
+            }
+
+            syncProfileNativeSelect();
+            renderButton();
+            syncSelectedUI();
+            resetAlertBaseline();
+            scheduleRender();
+            return;
+          }
+
           selectEl.value = value;
           renderButton();
           syncSelectedUI();
@@ -579,89 +759,91 @@ function getMapThumbnailUrl(mapName) {
         }
 
         function syncSelectedUI() {
-          list.querySelectorAll(".csel-opt").forEach((b) => {
-            b.setAttribute("aria-selected", b.dataset.value === selectEl.value ? "true" : "false");
+          const selectedTeams = isTeamsFilter ? new Set(getTeamsFilterValues()) : null;
+          const selectedProfiles = isProfileSelect ? new Set(getProfileValues()) : null;
+
+          list.querySelectorAll(".csel-opt").forEach((optionButton) => {
+            let selected;
+            if (isTeamsFilter) {
+              selected = optionButton.dataset.value === "any"
+                ? selectedTeams.size === 0
+                : selectedTeams.has(optionButton.dataset.value);
+            } else if (isProfileSelect) {
+              selected = optionButton.dataset.value === "__manual__"
+                ? selectedProfiles.size === 0
+                : selectedProfiles.has(optionButton.dataset.value);
+            } else {
+              selected = optionButton.dataset.value === selectEl.value;
+            }
+
+            optionButton.setAttribute("aria-selected", selected ? "true" : "false");
           });
         }
 
-        function addOption(o) {
-          if (!o) return;
-          const b = document.createElement("button");
-          b.type = "button";
-          b.className = "csel-opt";
-          b.textContent = o.text;
-          b.dataset.value = o.value;
-          b.setAttribute("role", "option");
-          b.setAttribute("aria-selected", o.value === selectEl.value ? "true" : "false");
-          b.addEventListener("click", () => pick(o.value));
-          list.appendChild(b);
+        function addOption(optionData) {
+          if (!optionData) return;
+          const optionButton = document.createElement("button");
+          optionButton.type = "button";
+          optionButton.className = "csel-opt";
+          optionButton.textContent = optionData.text;
+          optionButton.dataset.value = optionData.value;
+          optionButton.setAttribute("role", "option");
+          optionButton.setAttribute("aria-selected", "false");
+          optionButton.addEventListener("click", () => pick(optionData.value));
+          list.appendChild(optionButton);
         }
 
         function addSep() {
-          const s = document.createElement("div");
-          s.className = "csel-sep";
-          list.appendChild(s);
+          const sep = document.createElement("div");
+          sep.className = "csel-sep";
+          list.appendChild(sep);
         }
 
         function addGroup(name) {
-          const g = document.createElement("div");
-          g.className = "csel-group";
-          g.textContent = name;
-          list.appendChild(g);
+          const group = document.createElement("div");
+          group.className = "csel-group";
+          group.textContent = name;
+          list.appendChild(group);
         }
 
         function addOptionByValue(value) {
-          const opt = Array.from(selectEl.options).find((o) => o.value === value);
-          if (!opt) return;
-          addOption({ value: opt.value, text: opt.textContent });
+          const option = Array.from(selectEl.options).find((o) => o.value === value);
+          if (option) addOption({ value: option.value, text: option.textContent });
         }
 
         function buildList() {
           list.innerHTML = "";
-
-          const isTeamsFilter = selectEl.id === "teamsFilter";
           const isSort = selectEl.id === "sort";
 
+          if (isProfileSelect) {
+            addOption({ value: "__manual__", text: "Manual filters" });
+            const options = Array.from(selectEl.options);
+            if (options.length) {
+              addSep();
+              addGroup("Saved profiles");
+              for (const option of options) addOption({ value: option.value, text: option.textContent });
+            }
+            syncSelectedUI();
+            return;
+          }
+
           if (isTeamsFilter) {
-  const addGroup = (name) => {
-    const g = document.createElement("div");
-    g.className = "csel-group";
-    g.textContent = name;
-    list.appendChild(g);
-  };
-  const addSep = () => {
-    const s = document.createElement("div");
-    s.className = "csel-sep";
-    list.appendChild(s);
-  };
+            const options = Array.from(selectEl.options).map((o) => ({ value: o.value, text: o.textContent }));
+            const byValue = (value) => options.find((option) => option.value === value);
 
-  const opts = Array.from(selectEl.options).map((o) => ({
-    value: o.value,
-    text: o.textContent,
-  }));
-
-  const byValue = (v) => opts.find((x) => x.value === v);
-
-  addOption(byValue("any"));
-
-    addSep();
-  addGroup("Per-Team Formats");
-  for (const v of ["format:Duos", "format:Trios", "format:Quads"]) {
-    addOption(byValue(v));
-  }
-
-  addSep();
-  addGroup("Teams (Exact Count)");
-  for (const v of ["teams:2", "teams:3", "teams:4", "teams:5", "teams:6", "teams:7", "teams:8"]) {
-    addOption(byValue(v));
-  }
-
-  addSep();
-  addGroup("Special");
-  addOption(byValue("format:HumansVsNations"));
-
-  return; // IMPORTANT: prevents any other options from being appended
-}
+            addOption(byValue("any"));
+            addSep();
+            addGroup("Per-Team Formats");
+            for (const value of ["format:Duos", "format:Trios", "format:Quads"]) addOption(byValue(value));
+            addSep();
+            addGroup("Teams (Exact Count)");
+            for (const value of ["teams:2", "teams:3", "teams:4", "teams:5", "teams:6", "teams:7", "teams:8"]) addOption(byValue(value));
+            addSep();
+            addGroup("Special");
+            addOption(byValue("format:HumansVsNations"));
+            syncSelectedUI();
+            return;
+          }
 
           if (isSort) {
             addGroup("Players");
@@ -675,27 +857,35 @@ function getMapThumbnailUrl(mapName) {
             addGroup("Other");
             addOptionByValue("starts_asc");
             addOptionByValue("map_asc");
+            syncSelectedUI();
             return;
           }
 
-          for (const opt of Array.from(selectEl.options)) {
-            addOption({ value: opt.value, text: opt.textContent });
+          for (const option of Array.from(selectEl.options)) {
+            addOption({ value: option.value, text: option.textContent });
           }
+          syncSelectedUI();
         }
 
         btn.addEventListener("click", toggle);
-        btn.addEventListener("keydown", (e) => {
-          if (e.key === "Escape") close();
+        btn.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") close();
         });
 
         host.appendChild(btn);
         host.appendChild(list);
 
-        renderButton();
-        buildList();
+        host._refreshCustomSelect = () => {
+          syncProfileNativeSelect();
+          buildList();
+          renderButton();
+          syncSelectedUI();
+        };
 
-        document.addEventListener("click", (e) => {
-          if (!host.contains(e.target)) close();
+        host._refreshCustomSelect();
+
+        document.addEventListener("click", (event) => {
+          if (!host.contains(event.target)) close();
         });
 
         selectEl.addEventListener("change", () => {
@@ -712,7 +902,7 @@ function getMapThumbnailUrl(mapName) {
           buildCustomSelect(selectEl, host);
         });
       }
-
+      
       const els = {
         status: $("status"),
         worker: $("worker"),
@@ -721,13 +911,18 @@ function getMapThumbnailUrl(mapName) {
         hideEmpty: $("hideEmpty"),
         reset: $("reset"),
         sort: $("sort"),
-
+      
         minJoined: $("minJoined"),
         maxJoined: $("maxJoined"),
         maxPlayersEq: $("maxPlayersEq"),
         minMaxPlayers: $("minMaxPlayers"),
         maxMaxPlayers: $("maxMaxPlayers"),
 
+        profileName: $("profileName"),
+        profileSelect: $("profileSelect"),
+        profileSave: $("profileSave"),
+        profileDelete: $("profileDelete"),
+      
         modFilters: $("modFilters"),
         totalCount: $("totalCount"),
         shownCount: $("shownCount"),
@@ -735,12 +930,17 @@ function getMapThumbnailUrl(mapName) {
         rows: $("rows"),
         alertToggle: $("alertToggle"),
       };
-
+      
       const state = {
         ws: null,
         payload: null,
         tri: new Map(),
-
+      
+        teamFilters: new Set(["any"]),
+        activeProfiles: new Set(),
+        profileSelectionOrder: [],
+        applyingProfile: false,
+      
         alertsEnabled: localStorage.getItem("openfrontAlertsEnabled") === "true",
         alertPrevIds: new Set(),
         alertBaselineReady: false,
@@ -750,7 +950,234 @@ function getMapThumbnailUrl(mapName) {
         titleBlinkStopTimer: null,
         originalTitle: document.title,
         audioCtx: null,
+        renderScheduled: false,
+        lastRowsHtml: "",
+        clickedLinks: new Map(),
+      
+        reconnectTimer: null,
+        staleTimer: null,
+        lastMessageAt: 0,
+        reconnectAttempts: 0,
+        manualDisconnect: false,
       };
+      
+
+
+      const PROFILE_STORAGE_KEY = "openfrontFilterProfiles";
+      const PROFILE_ACTIVE_STORAGE_KEY = "openfrontActiveProfiles";
+
+      function getStoredProfiles() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) || "[]");
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function saveStoredProfiles(profiles) {
+        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profiles));
+      }
+
+      function getSavedActiveProfileNames() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(PROFILE_ACTIVE_STORAGE_KEY) || "[]");
+          return Array.isArray(parsed) ? parsed.filter((name) => typeof name === "string") : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function saveActiveProfileNames() {
+        localStorage.setItem(PROFILE_ACTIVE_STORAGE_KEY, JSON.stringify(state.profileSelectionOrder));
+      }
+
+      function refreshProfileSelect(selectedNames = null) {
+        const profiles = getStoredProfiles().filter((profile) => profile?.name)
+          .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        const validNames = new Set(profiles.map((profile) => profile.name));
+
+        if (selectedNames !== null) {
+          const names = Array.isArray(selectedNames) ? selectedNames : [selectedNames];
+          state.activeProfiles = new Set(names.filter((name) => validNames.has(name)));
+          state.profileSelectionOrder = names.filter((name) => state.activeProfiles.has(name));
+        } else {
+          state.activeProfiles = new Set(Array.from(state.activeProfiles).filter((name) => validNames.has(name)));
+          state.profileSelectionOrder = state.profileSelectionOrder.filter((name) => state.activeProfiles.has(name));
+        }
+
+        els.profileSelect.innerHTML = "";
+        for (const profile of profiles) {
+          const option = document.createElement("option");
+          option.value = profile.name;
+          option.textContent = profile.name;
+          option.selected = state.activeProfiles.has(profile.name);
+          els.profileSelect.appendChild(option);
+        }
+
+        saveActiveProfileNames();
+        document.querySelector('.csel[data-select="profileSelect"]')?._refreshCustomSelect?.();
+      }
+
+      function clearActiveProfiles() {
+        state.activeProfiles.clear();
+        state.profileSelectionOrder = [];
+        saveActiveProfileNames();
+        refreshProfileSelect([]);
+        resetAlertBaseline();
+        scheduleRender();
+      }
+
+      function leaveProfileModeOnManualChange() {
+        if (state.applyingProfile || state.activeProfiles.size === 0) return;
+        clearActiveProfiles();
+      }
+
+      function getProfileSnapshot() {
+        const filters = getFiltersFromUI();
+        return {
+          worker: els.worker.value,
+          type: filters.type,
+          hideEmpty: filters.hideEmpty,
+          teamFilters: filters.teamFilters,
+          sort: filters.sort,
+          minJoined: filters.minJoined,
+          maxJoined: filters.maxJoined,
+          maxPlayersEq: filters.maxPlayersEq,
+          minMaxPlayers: filters.minMaxPlayers,
+          maxMaxPlayers: filters.maxMaxPlayers,
+          tri: Array.from(state.tri.entries()),
+        };
+      }
+
+      function normalizeProfileFilters(filters) {
+        const value = filters || {};
+        return {
+          worker: value.worker || "w0",
+          type: value.type || "all",
+          hideEmpty: value.hideEmpty === true,
+          teamFilters: Array.isArray(value.teamFilters) ? value.teamFilters.filter((item) => item && item !== "any") : [],
+          sort: value.sort || "players_desc",
+          minJoined: value.minJoined ?? null,
+          maxJoined: value.maxJoined ?? null,
+          maxPlayersEq: value.maxPlayersEq ?? null,
+          minMaxPlayers: value.minMaxPlayers ?? null,
+          maxMaxPlayers: value.maxMaxPlayers ?? null,
+          tri: Array.isArray(value.tri) ? value.tri : [],
+        };
+      }
+
+      function getActiveProfileDefinitions() {
+        if (state.activeProfiles.size === 0) return [];
+        const active = state.activeProfiles;
+        return getStoredProfiles()
+          .filter((profile) => profile?.name && active.has(profile.name))
+          .map((profile) => ({ ...profile, filters: normalizeProfileFilters(profile.filters) }));
+      }
+
+      function setInputNum(element, value) {
+        element.value = value === null || value === undefined ? "" : String(value);
+      }
+
+      function dispatchChange(element) {
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      function applyProfileSnapshot(rawFilters) {
+        if (!rawFilters) return;
+        const filters = normalizeProfileFilters(rawFilters);
+        const nextWorker = filters.worker;
+        const workerChanged = els.worker.value !== nextWorker;
+
+        state.applyingProfile = true;
+        try {
+          els.worker.value = nextWorker;
+          els.type.value = filters.type;
+          els.hideEmpty.value = filters.hideEmpty ? "yes" : "no";
+          els.sort.value = filters.sort;
+
+          state.teamFilters = new Set(filters.teamFilters.length ? filters.teamFilters : ["any"]);
+          els.teamsFilter.value = filters.teamFilters[0] || "any";
+
+          setInputNum(els.minJoined, filters.minJoined);
+          setInputNum(els.maxJoined, filters.maxJoined);
+          setInputNum(els.maxPlayersEq, filters.maxPlayersEq);
+          setInputNum(els.minMaxPlayers, filters.minMaxPlayers);
+          setInputNum(els.maxMaxPlayers, filters.maxMaxPlayers);
+
+          initTriState();
+          for (const [id, value] of filters.tri) {
+            if ([TRI.ANY, TRI.IN, TRI.NEED, TRI.OUT].includes(value)) state.tri.set(id, value);
+          }
+          renderModFiltersUI();
+
+          [
+            els.type,
+            els.teamsFilter,
+            els.hideEmpty,
+            els.sort,
+            els.minJoined,
+            els.maxJoined,
+            els.maxPlayersEq,
+            els.minMaxPlayers,
+            els.maxMaxPlayers,
+          ].forEach(dispatchChange);
+
+          if (workerChanged) dispatchChange(els.worker);
+        } finally {
+          state.applyingProfile = false;
+        }
+
+        resetAlertBaseline();
+        scheduleRender();
+      }
+
+      function saveCurrentProfile() {
+        const name = els.profileName.value.trim();
+        if (!name) {
+          alert("Name the profile first.");
+          return;
+        }
+
+        const profiles = getStoredProfiles().filter((profile) => profile?.name !== name);
+        profiles.push({
+          name,
+          filters: getProfileSnapshot(),
+          updatedAt: Date.now(),
+        });
+
+        saveStoredProfiles(profiles);
+        state.activeProfiles = new Set([name]);
+        state.profileSelectionOrder = [name];
+        refreshProfileSelect([name]);
+        resetAlertBaseline();
+        scheduleRender();
+      }
+
+      function deleteSelectedProfile() {
+        const typedName = els.profileName.value.trim();
+        const names = typedName ? [typedName] : Array.from(state.activeProfiles);
+        if (names.length === 0) {
+          alert("Select a saved profile first.");
+          return;
+        }
+
+        const remove = new Set(names);
+        const profiles = getStoredProfiles();
+        const next = profiles.filter((profile) => !remove.has(profile?.name));
+        if (next.length === profiles.length) {
+          alert("That profile does not exist.");
+          return;
+        }
+
+        saveStoredProfiles(next);
+        for (const name of remove) state.activeProfiles.delete(name);
+        state.profileSelectionOrder = state.profileSelectionOrder.filter((name) => !remove.has(name));
+        els.profileName.value = "";
+        refreshProfileSelect();
+        resetAlertBaseline();
+        scheduleRender();
+      }
 
       const boolFilters = [
         { id: "isCompact", label: "Compact", get: (g) => getPmTrue(g, "isCompact") },
@@ -764,34 +1191,96 @@ function getMapThumbnailUrl(mapName) {
         { id: "isPeaceTime", label: "Peace Time", get: (g) => getPmTrue(g, "isPeaceTime") },
         { id: "isHardNations", label: "Hard Nations", get: (g) => getPmTrue(g, "isHardNations") },
       ];
-
+      
       const numExact = [
         { id: "goldMultiplier_eq_2", label: "Gold Multiplier=2", key: "goldMultiplier", exact: 2 },
         { id: "startingGold_eq_1000000", label: "Starting Gold=1,000,000", key: "startingGold", exact: 1000000 },
         { id: "startingGold_eq_5000000", label: "Starting Gold=5,000,000", key: "startingGold", exact: 5000000 },
         { id: "startingGold_eq_25000000", label: "Starting Gold=25,000,000", key: "startingGold", exact: 25000000 },
       ];
-
+      
       function parseNum(v) {
         if (v === "" || v === null || v === undefined) return null;
         const n = Number(v);
         return Number.isFinite(n) ? n : null;
       }
-
+      
       function getJoinUrl(gameID) {
         if (!gameID) return "about:blank";
         return `https://openfront.io/game/${encodeURIComponent(gameID)}`;
       }
-
-      function getCfg(g) { return g?.gameConfig || null; }
-      function getPm(g) { return g?.gameConfig?.publicGameModifiers || null; }
-
+      
+      async function copyText(text) {
+        if (!text || text === "about:blank") return false;
+      
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+      
+        try {
+          return document.execCommand("copy");
+        } finally {
+          ta.remove();
+        }
+      }
+      
+      function markActionClicked(actionLink) {
+        const key = actionLink.dataset.actionKey;
+        const until = Date.now() + 850;
+      
+        state.clickedLinks.set(key, until);
+        actionLink.classList.add("clicked");
+      
+        setTimeout(() => {
+          if (state.clickedLinks.get(key) !== until) return;
+          state.clickedLinks.delete(key);
+          actionLink.classList.remove("clicked");
+          scheduleRender();
+        }, 850);
+      }
+      
+      function isActionClicked(key) {
+        const until = state.clickedLinks.get(key);
+        if (!until) return false;
+        if (until <= Date.now()) {
+          state.clickedLinks.delete(key);
+          return false;
+        }
+        return true;
+      }
+      
+      function wireActionLinks() {
+        els.rows.addEventListener("click", (e) => {
+          const actionLink = e.target.closest("a[data-action-key]");
+          if (!actionLink) return;
+      
+          markActionClicked(actionLink);
+      
+          if (actionLink.dataset.copyUrl) {
+            e.preventDefault();
+            copyText(actionLink.dataset.copyUrl).catch(() => {});
+          }
+        });
+      }
+      
+      function getCfg(g) { return g?.cfg || g?.gameConfig || null; }
+      function getPm(g) { return g?.pm || g?.gameConfig?.publicGameModifiers || null; }
+      
       function getPmTrue(g, key) {
         const pm = getPm(g);
         if (!pm || !(key in pm)) return null;
         return pm[key] === true;
       }
-
+      
       function getAnyTrue(g, sources) {
         const pm = getPm(g);
         const cfg = getCfg(g);
@@ -802,7 +1291,7 @@ function getMapThumbnailUrl(mapName) {
         }
         return null;
       }
-
+      
       function getNumber(g, key) {
         const pm = getPm(g);
         if (pm && typeof pm[key] === "number") return pm[key];
@@ -810,83 +1299,125 @@ function getMapThumbnailUrl(mapName) {
         if (cfg && typeof cfg[key] === "number") return cfg[key];
         return null;
       }
+      
       function getFirstNumber(...values) {
-  for (const v of values) {
-    if (typeof v === "number" && Number.isFinite(v)) return v;
-  }
-  return null;
-}
-
-function getNationsAmount(g) {
-  const cfg = g?.gameConfig || {};
-  const pm = cfg?.publicGameModifiers || {};
-
-  return getFirstNumber(
-    pm.numNations,
-    pm.nations,
-    pm.nationCount,
-    cfg.numNations,
-    cfg.nations,
-    cfg.nationCount,
-    cfg.maxNations
-  );
-}
-
-function getBotsAmount(g) {
-  const cfg = g?.gameConfig || {};
-  const pm = cfg?.publicGameModifiers || {};
-
-  return getFirstNumber(
-    pm.numBots,
-    pm.bots,
-    pm.botCount,
-    cfg.numBots,
-    cfg.bots,
-    cfg.botCount,
-    cfg.maxBots
-  );
-}
-
+        for (const v of values) {
+          if (typeof v === "number" && Number.isFinite(v)) return v;
+        }
+        return null;
+      }
+      
+      function getNationsAmount(g) {
+        const cfg = g?.gameConfig || {};
+        const pm = cfg?.publicGameModifiers || {};
+      
+        return getFirstNumber(
+          pm.numNations,
+          pm.nations,
+          pm.nationCount,
+          cfg.numNations,
+          cfg.nations,
+          cfg.nationCount,
+          cfg.maxNations
+        );
+      }
+      
       function triMatchBool(value, tri) {
         if (tri === TRI.ANY) return true;
         if (tri === TRI.IN) return value === true;
         if (tri === TRI.OUT) return value !== true;
         return true;
       }
-
+      
       function triMatchNumExact(num, tri, exact) {
         if (tri === TRI.ANY) return true;
         if (tri === TRI.IN) return num === exact;
         if (tri === TRI.OUT) return num !== exact;
         return true;
       }
-
+      
       function initTriState() {
         state.tri.clear();
         for (const f of boolFilters) state.tri.set(f.id, TRI.ANY);
         for (const n of numExact) state.tri.set(n.id, TRI.ANY);
       }
-
+      
       function setTri(id, value) {
+        leaveProfileModeOnManualChange();
         state.tri.set(id, value);
         document.querySelectorAll(`[data-tri="${CSS.escape(id)}"]`).forEach((btn) => {
           btn.classList.toggle("active", btn.getAttribute("data-val") === value);
         });
         resetAlertBaseline();
-        render();
+        scheduleRender();
       }
-
+      
       function triButtonGroup(id) {
-        const cur = state.tri.get(id) || TRI.ANY;
-        const mkBtn = (val, text) =>
-          `<button type="button" class="triBtn ${cur === val ? "active" : ""}" data-tri="${escapeHtml(id)}" data-val="${escapeHtml(val)}">${escapeHtml(text)}</button>`;
-        return `<div class="triBtns">${mkBtn(TRI.ANY, "ANY")}${mkBtn(TRI.IN, "IN")}${mkBtn(TRI.OUT, "OUT")}</div>`;
-      }
+  const cur = state.tri.get(id) || TRI.ANY;
+  const mkBtn = (val, text) =>
+    `<button type="button" class="triBtn ${cur === val ? "active" : ""}" data-tri="${escapeHtml(id)}" data-val="${escapeHtml(val)}">${escapeHtml(text)}</button>`;
 
+  return `<div class="triBtns">
+    ${mkBtn(TRI.ANY, "ANY")}
+    ${mkBtn(TRI.IN, "IN")}
+    ${mkBtn(TRI.NEED, "NEED")}
+    ${mkBtn(TRI.OUT, "OUT")}
+  </div>`;
+}
+function matchModifierFilters(g, triState = state.tri) {
+  let hasNeed = false;
+  let allNeedMatched = true;
+
+  let hasIn = false;
+  let anyInMatched = false;
+
+  for (const bf of boolFilters) {
+    const tri = triState.get(bf.id) || TRI.ANY;
+    const matched = bf.get(g.raw) === true;
+
+    if (tri === TRI.OUT && matched) return false;
+
+    if (tri === TRI.NEED) {
+      hasNeed = true;
+      if (!matched) allNeedMatched = false;
+    }
+
+    if (tri === TRI.IN) {
+      hasIn = true;
+      if (matched) anyInMatched = true;
+    }
+  }
+
+  for (const nf of numExact) {
+    const tri = triState.get(nf.id) || TRI.ANY;
+    const matched = getNumber(g.raw, nf.key) === nf.exact;
+
+    if (tri === TRI.OUT && matched) return false;
+
+    if (tri === TRI.NEED) {
+      hasNeed = true;
+      if (!matched) allNeedMatched = false;
+    }
+
+    if (tri === TRI.IN) {
+      hasIn = true;
+      if (matched) anyInMatched = true;
+    }
+  }
+
+  // NEED filters are hard requirements
+  if (hasNeed) return allNeedMatched;
+
+  // If there are no NEED filters, IN behaves as OR
+  if (hasIn) return anyInMatched;
+
+  // No modifier filters selected
+  return true;
+}
       function renderModFiltersUI() {
         const first = new Set(["isCompact", "isCrowded", "randomSpawn"]);
         const blocks = [];
-
+      
         for (const f of boolFilters.filter((x) => first.has(x.id))) {
           blocks.push(`<div class="modBox"><div class="modTitle mono">${escapeHtml(f.label)}</div>${triButtonGroup(f.id)}</div>`);
         }
@@ -896,30 +1427,69 @@ function getBotsAmount(g) {
         for (const f of boolFilters.filter((x) => !first.has(x.id))) {
           blocks.push(`<div class="modBox"><div class="modTitle mono">${escapeHtml(f.label)}</div>${triButtonGroup(f.id)}</div>`);
         }
-
+      
         els.modFilters.innerHTML = blocks.join("");
         els.modFilters.querySelectorAll("button[data-tri][data-val]").forEach((btn) => {
           btn.addEventListener("click", () => setTri(btn.getAttribute("data-tri"), btn.getAttribute("data-val")));
         });
       }
-
+      
+      function normalizeGame(g) {
+        const cfg = g?.gameConfig || {};
+        const pm = cfg.publicGameModifiers || {};
+        const joined = Number(g?.numClients ?? 0);
+        const maxPlayers = typeof cfg.maxPlayers === "number" ? cfg.maxPlayers : null;
+      
+        const teamValue = cfg.playerTeams ?? null;
+        const teamCount = typeof teamValue === "number" ? teamValue : null;
+        const compactTeam = String(teamValue ?? "").trim().replace(/\s+/g, "").toLowerCase();
+      
+        let format = null;
+        if (compactTeam === "duos") format = "Duos";
+        else if (compactTeam === "trios") format = "Trios";
+        else if (compactTeam === "quads") format = "Quads";
+        else if (compactTeam === "humansvsnations") format = "HumansVsNations";
+      
+        const kind = teamCount && teamCount > 1 ? "team" : (format ? "team" : (g.__rawType === "team" ? "team" : "ffa"));
+      
+        return {
+          raw: g,
+          cfg,
+          pm,
+          id: String(g?.gameID ?? ""),
+          map: String(cfg.gameMap ?? "—"),
+          joined,
+          maxPlayers,
+          availableSlots: maxPlayers !== null ? maxPlayers - joined : null,
+          fullness: maxPlayers && maxPlayers > 0 ? joined / maxPlayers : null,
+          kind,
+          teamCount,
+          playersPerTeam: typeof teamCount === "number" && maxPlayers !== null && teamCount > 0 ? maxPlayers / teamCount : null,
+          format,
+          startsAt: g?.startsAt ?? null,
+        };
+      }
+      
+      function getLobbyKind(g) {
+        return g?.kind || "ffa";
+      }
+      
       function flattenGames(payload) {
         const out = [];
         const gamesByType = payload?.games || {};
-        for (const [type, arr] of Object.entries(gamesByType)) {
+        for (const [rawType, arr] of Object.entries(gamesByType)) {
           if (!Array.isArray(arr)) continue;
-          for (const g of arr) out.push({ ...g, __type: type });
+          for (const g of arr) out.push(normalizeGame({ ...g, __rawType: rawType }));
         }
         return out;
       }
-
+      
       function getFiltersFromUI() {
         return {
           type: els.type.value,
           hideEmpty: els.hideEmpty.value === "yes",
-          teamsFilter: els.teamsFilter.value,
+          teamFilters: Array.from(state.teamFilters || []).filter((v) => v !== "any"),
           sort: els.sort.value,
-
           minJoined: parseNum(els.minJoined.value),
           maxJoined: parseNum(els.maxJoined.value),
           maxPlayersEq: parseNum(els.maxPlayersEq.value),
@@ -927,13 +1497,18 @@ function getBotsAmount(g) {
           maxMaxPlayers: parseNum(els.maxMaxPlayers.value),
         };
       }
-
+      
       function getAlertFilterKey(f) {
         const triState = Array.from(state.tri.entries()).sort(([a], [b]) => a.localeCompare(b));
+        const activeProfiles = getActiveProfileDefinitions()
+          .map((profile) => ({ name: profile.name, updatedAt: profile.updatedAt || 0 }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
         return JSON.stringify({
+          activeProfiles,
           type: f.type,
           hideEmpty: f.hideEmpty,
-          teamsFilter: f.teamsFilter,
+          teamFilters: f.teamFilters,
           minJoined: f.minJoined,
           maxJoined: f.maxJoined,
           maxPlayersEq: f.maxPlayersEq,
@@ -942,19 +1517,19 @@ function getBotsAmount(g) {
           tri: triState,
         });
       }
-
+      
       function updateAlertToggleUI() {
         if (!els.alertToggle) return;
         els.alertToggle.textContent = state.alertsEnabled ? "Alerts: On" : "Alerts: Off";
         els.alertToggle.classList.toggle("on", state.alertsEnabled);
       }
-
+      
       function currentMatchingIdsFromPayload() {
         if (!state.payload) return new Set();
         const f = getFiltersFromUI();
-        return new Set(flattenGames(state.payload).filter((g) => matchAllFilters(g, f)).map((g) => String(g.gameID || "")));
+        return new Set(flattenGames(state.payload).filter((g) => matchesCurrentFilters(g, f)).map((g) => String(g.id || "")));
       }
-
+      
       function resetAlertBaseline() {
         if (!state.payload) {
           state.alertPrevIds = new Set();
@@ -962,66 +1537,66 @@ function getBotsAmount(g) {
           state.alertLastFilterKey = "";
           return;
         }
-
+      
         const f = getFiltersFromUI();
         state.alertPrevIds = currentMatchingIdsFromPayload();
         state.alertBaselineReady = true;
         state.alertLastFilterKey = getAlertFilterKey(f);
       }
-
+      
       async function setAlertsEnabled(enabled) {
         state.alertsEnabled = enabled;
         localStorage.setItem("openfrontAlertsEnabled", String(enabled));
         updateAlertToggleUI();
-
+      
         if (enabled) {
           resetAlertBaseline();
-
+      
           try {
             state.audioCtx = state.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
             if (state.audioCtx.state === "suspended") await state.audioCtx.resume();
           } catch {}
-
+      
           if ("Notification" in window && Notification.permission === "default") {
             try { await Notification.requestPermission(); } catch {}
           }
         } else {
           stopTitleBlink();
           state.flashIds.clear();
-          render();
+          scheduleRender();
         }
       }
-
+      
       function playAlertSound() {
         if (!state.alertsEnabled) return;
-
+      
         try {
           const AudioCtx = window.AudioContext || window.webkitAudioContext;
           if (!AudioCtx) return;
-
+      
           const ctx = state.audioCtx || new AudioCtx();
           state.audioCtx = ctx;
           if (ctx.state === "suspended") ctx.resume().catch(() => {});
-
+      
           const now = ctx.currentTime;
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
-
+      
           osc.type = "sine";
           osc.frequency.setValueAtTime(880, now);
           osc.frequency.setValueAtTime(660, now + 0.13);
-
+      
           gain.gain.setValueAtTime(0.0001, now);
           gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
           gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-
+      
           osc.connect(gain);
           gain.connect(ctx.destination);
           osc.start(now);
           osc.stop(now + 0.38);
         } catch {}
       }
-
+      
       function stopTitleBlink() {
         if (state.titleBlinkTimer) clearInterval(state.titleBlinkTimer);
         if (state.titleBlinkStopTimer) clearTimeout(state.titleBlinkStopTimer);
@@ -1029,52 +1604,52 @@ function getBotsAmount(g) {
         state.titleBlinkStopTimer = null;
         document.title = state.originalTitle;
       }
-
+      
       function startTitleBlink(count) {
         stopTitleBlink();
-
+      
         let visible = false;
         state.titleBlinkTimer = setInterval(() => {
           visible = !visible;
           document.title = visible ? `(${count}) New OpenFront match!` : state.originalTitle;
         }, 800);
-
+      
         state.titleBlinkStopTimer = setTimeout(stopTitleBlink, 10000);
       }
-
+      
       function showDesktopNotification(newGames) {
         if (!state.alertsEnabled) return;
         if (!("Notification" in window)) return;
         if (Notification.permission !== "granted") return;
-
+      
         const first = newGames[0];
         const cfg = getCfg(first) || {};
         const maxPlayers = typeof cfg.maxPlayers === "number" ? `/${cfg.maxPlayers}` : "";
         const body = newGames.length === 1
-          ? `${cfg.gameMap ?? "Unknown map"} • ${first.numClients ?? 0}${maxPlayers} players • ${typeLabelShort(first)}`
+          ? `${cfg.gameMap ?? "Unknown map"} • ${first.joined ?? 0}${maxPlayers} players • ${typeLabelShort(first)}`
           : `${newGames.length} new lobbies match your filters`;
-
+      
         try {
           const n = new Notification("OpenFront lobby match", {
             body,
             tag: "openfront-lobby-match",
             renotify: true,
           });
-
+      
           n.onclick = () => {
             window.focus();
-            if (first?.gameID) window.open(getJoinUrl(first.gameID), "_blank", "noreferrer");
+            if (first?.id) window.open(getJoinUrl(first.id), "_blank", "noreferrer");
             n.close();
           };
         } catch {}
       }
-
+      
       function markNewMatches(newGames) {
         const until = Date.now() + 9000;
         for (const g of newGames) {
-          if (g.gameID) state.flashIds.set(String(g.gameID), until);
+          if (g.id) state.flashIds.set(String(g.id), until);
         }
-
+      
         if (els.alertToggle) {
           els.alertToggle.classList.remove("flash");
           void els.alertToggle.offsetWidth;
@@ -1082,150 +1657,144 @@ function getBotsAmount(g) {
           setTimeout(() => els.alertToggle.classList.remove("flash"), 4500);
         }
       }
-
+      
       function cleanupFlashIds() {
         const now = Date.now();
         for (const [id, until] of state.flashIds.entries()) {
           if (until <= now) state.flashIds.delete(id);
         }
       }
-
+      
+      function setRowsHtml(html) {
+        if (state.lastRowsHtml === html) return;
+        els.rows.innerHTML = html;
+        state.lastRowsHtml = html;
+      }
+      
+      function scheduleRender() {
+        if (state.renderScheduled) return;
+        state.renderScheduled = true;
+        requestAnimationFrame(() => {
+          state.renderScheduled = false;
+          render();
+        });
+      }
+      
       function handleNewMatchingGames(sortedGames, f) {
         const filterKey = getAlertFilterKey(f);
-        const currentIds = new Set(sortedGames.map((g) => String(g.gameID || "")));
-
+        const currentIds = new Set(sortedGames.map((g) => String(g.id || "")));
+      
         if (!state.alertsEnabled) {
           state.alertPrevIds = currentIds;
           state.alertBaselineReady = true;
           state.alertLastFilterKey = filterKey;
           return;
         }
-
+      
         if (!state.alertBaselineReady || state.alertLastFilterKey !== filterKey) {
           state.alertPrevIds = currentIds;
           state.alertBaselineReady = true;
           state.alertLastFilterKey = filterKey;
           return;
         }
-
+      
         const newGames = sortedGames.filter((g) => {
-          const id = String(g.gameID || "");
+          const id = String(g.id || "");
           return id && !state.alertPrevIds.has(id);
         });
-
+      
         state.alertPrevIds = currentIds;
         state.alertLastFilterKey = filterKey;
-
+      
         if (newGames.length === 0) return;
-
+      
         markNewMatches(newGames);
         playAlertSound();
         startTitleBlink(newGames.length);
         showDesktopNotification(newGames);
       }
+      
+      function matchTeamsFilter(g, teamFilters) {
+        if (!teamFilters || teamFilters.length === 0) return true;
 
+        const teams = g.teamCount ?? g.raw?.gameConfig?.playerTeams ?? null;
+        if (teams === null && !g.format) return false;
 
-      function normTeamsValue(v) {
-        if (v === null || v === undefined) return null;
-        if (typeof v === "number") return v;
-        return String(v).trim();
-      }
-
-      function matchTeamsFilter(g, teamsFilterValue) {
-        if (teamsFilterValue === "any") return true;
-
-        const teams = normTeamsValue(getCfg(g)?.playerTeams);
-        if (teams === null) return false;
-
-        if (teamsFilterValue.startsWith("teams:")) {
-          const n = Number(teamsFilterValue.split(":")[1]);
-          return typeof teams === "number" && teams === n;
+        for (const value of teamFilters) {
+          if (value.startsWith("teams:")) {
+            const n = Number(value.split(":")[1]);
+            if (typeof teams === "number" && teams === n) return true;
+          } else if (value.startsWith("format:")) {
+            const want = value.split(":")[1];
+            if (g.format === want) return true;
+          }
         }
 
-        if (teamsFilterValue.startsWith("format:")) {
-          const want = teamsFilterValue.split(":")[1];
-          if (typeof teams !== "string") return false;
-
-          const compact = String(teams).replace(/\s+/g, "");
-          const got =
-            compact.toLowerCase() === "humansvsnations" ? "HumansVsNations" :
-            /^duos$/i.test(teams) ? "Duos" :
-            /^trios$/i.test(teams) ? "Trios" :
-            /^quads$/i.test(teams) ? "Quads" :
-            teams;
-
-          return got === want;
-        }
-
-        return true;
+        return false;
       }
 
       function matchPlayerFilters(g, f) {
-        const joined = Number(g.numClients ?? 0);
-        const cfg = getCfg(g);
-        const maxPlayers = cfg && typeof cfg.maxPlayers === "number" ? cfg.maxPlayers : null;
-
+        const joined = g.joined ?? 0;
+        const maxPlayers = g.maxPlayers;
+      
         if (f.minJoined !== null && joined < f.minJoined) return false;
         if (f.maxJoined !== null && joined > f.maxJoined) return false;
-
+      
         if (f.maxPlayersEq !== null) {
           if (maxPlayers === null) return false;
           if (maxPlayers !== f.maxPlayersEq) return false;
         }
-
+      
         if (f.minMaxPlayers !== null) {
           if (maxPlayers === null) return false;
           if (maxPlayers < f.minMaxPlayers) return false;
         }
-
+      
         if (f.maxMaxPlayers !== null) {
           if (maxPlayers === null) return false;
           if (maxPlayers > f.maxMaxPlayers) return false;
         }
-
+      
         return true;
       }
+      
+      function matchAllFilters(g, f, triState = state.tri) {
+        if (f.type !== "all" && getLobbyKind(g) !== f.type) return false;
+        if (f.hideEmpty && (g.joined ?? 0) === 0) return false;
 
-      function matchAllFilters(g, f) {
-        if (f.type !== "all" && g.__type !== f.type) return false;
-        if (f.hideEmpty && Number(g.numClients ?? 0) === 0) return false;
-
-        if (!matchTeamsFilter(g, f.teamsFilter)) return false;
+        if (!matchTeamsFilter(g, f.teamFilters)) return false;
         if (!matchPlayerFilters(g, f)) return false;
-
-        for (const bf of boolFilters) {
-          const tri = state.tri.get(bf.id) || TRI.ANY;
-          if (!triMatchBool(bf.get(g), tri)) return false;
-        }
-
-        for (const nf of numExact) {
-          const tri = state.tri.get(nf.id) || TRI.ANY;
-          if (!triMatchNumExact(getNumber(g, nf.key), tri, nf.exact)) return false;
-        }
+        if (!matchModifierFilters(g, triState)) return false;
 
         return true;
       }
 
-      function sortGames(games, sort) {
-        const getMax = (g) => {
-          const n = g?.gameConfig?.maxPlayers;
-          return typeof n === "number" ? n : -1;
-        };
+      function matchesCurrentFilters(g, manualFilters) {
+        const profiles = getActiveProfileDefinitions();
+        if (profiles.length === 0) return matchAllFilters(g, manualFilters, state.tri);
 
+        return profiles.some((profile) => {
+          const triState = new Map(profile.filters.tri);
+          return matchAllFilters(g, profile.filters, triState);
+        });
+      }
+      
+      function sortGames(games, sort) {
+        const getMax = (g) => (typeof g.maxPlayers === "number" ? g.maxPlayers : -1);
+      
         const cmp =
           {
-            players_desc: (a, b) => (b.numClients ?? 0) - (a.numClients ?? 0),
-            players_asc: (a, b) => (a.numClients ?? 0) - (b.numClients ?? 0),
+            players_desc: (a, b) => (b.joined ?? 0) - (a.joined ?? 0),
+            players_asc: (a, b) => (a.joined ?? 0) - (b.joined ?? 0),
             maxPlayers_desc: (a, b) => getMax(b) - getMax(a),
             maxPlayers_asc: (a, b) => getMax(a) - getMax(b),
-
             starts_asc: (a, b) => (a.startsAt ?? Infinity) - (b.startsAt ?? Infinity),
-            map_asc: (a, b) => String(a.gameConfig?.gameMap ?? "").localeCompare(String(b.gameConfig?.gameMap ?? "")),
-          }[sort] || ((a, b) => (b.numClients ?? 0) - (a.numClients ?? 0));
-
+            map_asc: (a, b) => String(a.map ?? "").localeCompare(String(b.map ?? "")),
+          }[sort] || ((a, b) => (b.joined ?? 0) - (a.joined ?? 0));
+      
         return games.slice().sort(cmp);
       }
-
+      
       function formatDuration(s) {
         const m = Math.floor(s / 60);
         const r = s % 60;
@@ -1235,7 +1804,7 @@ function getBotsAmount(g) {
         const mm = m % 60;
         return `${h}h ${mm}m`;
       }
-
+      
       function formatStarts(g, serverTime) {
         if (!g.startsAt) return "—";
         if (!serverTime) return String(g.startsAt);
@@ -1243,179 +1812,245 @@ function getBotsAmount(g) {
         if (deltaS > 0) return `in ${formatDuration(deltaS)}`;
         return "started";
       }
-
-      function typeLabelShort(g) {
-        const t = String(g.__type || "").toLowerCase();
-        if (t === "ffa") return "Free For All";
-        if (t !== "team") return titleCaseWords(t);
-
-        const teams = normTeamsValue(g?.gameConfig?.playerTeams);
-        if (typeof teams === "number" && Number.isFinite(teams)) return `${teams} Teams`;
-
-        const s = String(teams ?? "").trim();
-        if (/^duos$/i.test(s)) return "Duos";
-        if (/^trios$/i.test(s)) return "Trios";
-        if (/^quads$/i.test(s)) return "Quads";
-        if (s.replace(/\s+/g, "").toLowerCase() === "humansvsnations") return "Humans Vs Nations";
-        return s ? titleCaseWords(s) : "Team";
-      }
-
-      function densityLabel(g) {
-        const pm = getPm(g) || {};
-        if (pm.isCrowded === true) return "Crowded";
-        if (pm.isCompact === true) return "Compact";
-        return "Normal";
-      }
-
-      function modeSummaryLine(g) {
-        return `${typeLabelShort(g)} • ${densityLabel(g)}`;
-      }
-
-      function trueOnlyTagsHtml(g) {
-        const cfg = getCfg(g) || {};
-        const pm = getPm(g) || {};
-        const tags = [];
-
-        const push = (s) => tags.push(titleCaseWords(s));
-
-        if (pm.isCompact === true) push("compact");
-        if (pm.isCrowded === true) push("crowded");
-        if (pm.isAlliancesDisabled === true) push("alliances disabled");
-        if (pm.isNukesDisabled === true) push("nukes disabled");
-        if (pm.isPortsDisabled === true) push("ports disabled");
-        if (pm.isSAMsDisabled === true) push("sams disabled");
-        if (pm.isPeaceTime === true) push("peace time");
-        if (pm.isHardNations === true) push("hard nations");
-
-        if (pm.isRandomSpawn === true || cfg.randomSpawn === true) push("random spawn");
-        if (pm.isWaterNukes === true || cfg.waterNukes === true) push("water nukes");
-
-        if (cfg.playerTeams !== undefined && cfg.playerTeams !== null) {
-          tags.push(`PlayerTeams=${titleCaseWords(String(cfg.playerTeams))}`);
+      
+      function formatTeamCountLabel(teamCount, maxPlayers) {
+        if (typeof teamCount !== "number" || !Number.isFinite(teamCount) || teamCount <= 1) return "Team";
+      
+        if (typeof maxPlayers === "number" && Number.isFinite(maxPlayers) && maxPlayers > 0) {
+          const perTeam = maxPlayers / teamCount;
+          const perTeamText = Number.isInteger(perTeam) ? String(perTeam) : perTeam.toFixed(1).replace(/\.0$/, "");
+          return `${teamCount} Teams of ${perTeamText} Players`;
         }
-
-        const sg = getNumber(g, "startingGold");
+      
+        return `${teamCount} Teams`;
+      }
+      
+      function typeLabelShort(g) {
+        if (g.kind === "ffa") return "Free For All";
+        if (g.format === "Duos") return "Duos";
+        if (g.format === "Trios") return "Trios";
+        if (g.format === "Quads") return "Quads";
+        if (g.format === "HumansVsNations") return "Humans Vs Nations";
+      
+        if (typeof g.teamCount === "number" && Number.isFinite(g.teamCount)) {
+          return formatTeamCountLabel(g.teamCount, g.maxPlayers);
+        }
+      
+        return "Team";
+      }
+      
+      function modeSummaryLine(g) {
+        return typeLabelShort(g);
+      }
+      
+      function trueOnlyTagsHtml(g) {
+        const tags = [];
+        const push = (s) => tags.push(titleCaseWords(s));
+      
+        if (g.pm?.isCompact === true) push("compact");
+        if (g.pm?.isCrowded === true) push("crowded");
+        if (g.pm?.isAlliancesDisabled === true) push("alliances disabled");
+        if (g.pm?.isNukesDisabled === true) push("nukes disabled");
+        if (g.pm?.isPortsDisabled === true) push("ports disabled");
+        if (g.pm?.isSAMsDisabled === true) push("sams disabled");
+        if (g.pm?.isPeaceTime === true) push("peace time");
+        if (g.pm?.isHardNations === true) push("hard nations");
+      
+        if (g.pm?.isRandomSpawn === true || g.cfg?.randomSpawn === true) push("random spawn");
+        if (g.pm?.isWaterNukes === true || g.cfg?.waterNukes === true) push("water nukes");
+      
+        if (g.raw?.gameConfig?.playerTeams !== undefined && g.raw?.gameConfig?.playerTeams !== null) {
+          tags.push(`PlayerTeams=${titleCaseWords(String(g.raw.gameConfig.playerTeams))}`);
+        }
+      
+        const sg = getNumber(g.raw, "startingGold");
         if (Number.isFinite(sg)) tags.push(`StartingGold=${sg}`);
-
-        const gm = getNumber(g, "goldMultiplier");
+      
+        const gm = getNumber(g.raw, "goldMultiplier");
         if (Number.isFinite(gm)) tags.push(`GoldMultiplier=${gm}`);
-        const nations = getNationsAmount(g);
-if (nations !== null) tags.push(`Nations=${nations}`);
-
-const bots = getBotsAmount(g);
-if (bots !== null) tags.push(`Bots=${bots}`);
+      
+        const nations = getNationsAmount(g.raw);
+        if (nations !== null) tags.push(`Nations=${nations}`);
+      
         if (tags.length === 0) return "";
         return `<div class="tags">${tags.map((t) => `<span class="tag mono">${escapeHtml(t)}</span>`).join("")}</div>`;
       }
-
-function rowHtml(g, serverTime) {
-  const cfg = getCfg(g) || {};
-  const gameID = g.gameID || "";
-  const joinUrl = getJoinUrl(gameID);
-  const maxPlayers = typeof cfg.maxPlayers === "number" ? cfg.maxPlayers : null;
-const map = String(cfg.gameMap ?? "—");
-const thumbUrl = getMapThumbnailUrl(map);
-const isNewMatchFlash = state.flashIds.has(String(gameID));
-
-  return `
-        <tr class="${isNewMatchFlash ? "newMatchFlash" : ""}">
-          <td class="join"><a href="${joinUrl}" target="_blank" rel="noreferrer">Join</a></td>
-
-          <td>
-            <div style="display:flex; align-items:center; gap:10px">
-              <img src="${thumbUrl}" alt="Map" style="width:150px;height:90px;object-fit:cover;flex:0 0 auto;border-radius:10px;box-shadow:0 0 0 1.5px rgba(0,0,0,0.24)" onerror="this.onerror=null;this.src='https://via.placeholder.com/120x72?text=No+map';">
-
-              <div>
-                <b>${escapeHtml(map)}</b>
-                <div class="status">${escapeHtml(modeSummaryLine(g))}</div>
+      
+      function rowHtml(g, serverTime) {
+        const gameID = g.id || "";
+        const joinUrl = getJoinUrl(gameID);
+        const maxPlayers = g.maxPlayers;
+        const map = String(g.map ?? "—");
+        const thumbUrl = getMapThumbnailUrl(map);
+        const isNewMatchFlash = state.flashIds.has(String(gameID));
+        const joinKey = `join:${gameID}`;
+        const copyKey = `copy:${gameID}`;
+        const joinClicked = isActionClicked(joinKey);
+        const copyClicked = isActionClicked(copyKey);
+      
+        return `
+          <tr class="${isNewMatchFlash ? "newMatchFlash" : ""}">
+            <td class="join">
+              <div class="joinActions">
+                <a class="actionLink joinLink ${joinClicked ? "clicked" : ""}" href="${joinUrl}" target="_blank" rel="noreferrer" data-action-key="${escapeHtml(joinKey)}">Join</a>
+                <a class="actionLink copyLink ${copyClicked ? "clicked" : ""}" href="#" data-action-key="${escapeHtml(copyKey)}" data-copy-url="${escapeHtml(joinUrl)}" title="Copy game link">Copy</a>
               </div>
-            </div>
-          </td>
-
-          <td class="mono">${escapeHtml(gameID)}</td>
-
-          <td class="mono">${escapeHtml(titleCaseWords(String(g.__type)))}</td>
-
-          <td class="mono">${escapeHtml(String(g.numClients ?? 0))}${maxPlayers !== null ? "/" + escapeHtml(String(maxPlayers)) : ""}</td>
-
-          <td>
-            <div>${escapeHtml(formatStarts(g, serverTime))}</div>
-            <div class="status mono">${g.startsAt ? escapeHtml(String(g.startsAt)) : ""}</div>
-          </td>
-
-          <td>${trueOnlyTagsHtml(g)}</td>
-        </tr>
-  `;
-}
-
+            </td>
+      
+            <td>
+              <div style="display:flex; align-items:center; gap:10px">
+                <img src="${thumbUrl}" alt="Map" loading="lazy" decoding="async" style="width:150px;height:90px;object-fit:cover;flex:0 0 auto;border-radius:10px;box-shadow:0 0 0 1.5px rgba(0,0,0,0.24)" onerror="this.onerror=null;this.src='https://via.placeholder.com/120x72?text=No+map';">
+                <div>
+                  <b>${escapeHtml(map)}</b>
+                  <div class="status">${escapeHtml(modeSummaryLine(g))}</div>
+                </div>
+              </div>
+            </td>
+      
+            <td class="mono">${escapeHtml(gameID)}</td>
+            <td class="mono">${escapeHtml(getLobbyKind(g).toUpperCase())}</td>
+            <td class="mono">${escapeHtml(String(g.joined ?? 0))}${maxPlayers !== null ? "/" + escapeHtml(String(maxPlayers)) : ""}</td>
+      
+            <td>
+              <div>${escapeHtml(formatStarts(g, serverTime))}</div>
+              <div class="status mono">${g.startsAt ? escapeHtml(String(g.startsAt)) : ""}</div>
+            </td>
+      
+            <td>${trueOnlyTagsHtml(g)}</td>
+          </tr>
+        `;
+      }
+      
       function render() {
         if (!state.payload) return;
-
+      
         cleanupFlashIds();
-
+      
         const serverTime = state.payload.serverTime;
         const games = flattenGames(state.payload);
-
+      
         els.serverTime.textContent = String(serverTime ?? "—");
         els.totalCount.textContent = String(games.length);
-
+      
         const f = getFiltersFromUI();
-        const filtered = games.filter((g) => matchAllFilters(g, f));
+        const filtered = games.filter((g) => matchesCurrentFilters(g, f));
         const sorted = sortGames(filtered, f.sort);
-
+      
         handleNewMatchingGames(sorted, f);
-
+      
         els.shownCount.textContent = String(sorted.length);
-
+      
         if (sorted.length === 0) {
-          els.rows.innerHTML = `<tr><td colspan="7" class="mono">no matches</td></tr>`;
+          setRowsHtml(`<tr><td colspan="7" class="mono">no matches</td></tr>`);
           return;
         }
-        console.log('Going to render rows:', JSON.stringify(sorted, null, 2));
-        els.rows.innerHTML = sorted.map((g, idx) => {
+      
+        const rowsHtml = sorted.map((g, idx) => {
           try {
             return rowHtml(g, serverTime);
           } catch (e) {
-            console.error('Error rendering row', idx, g, e);
-            return `<tr><td colspan="7" class="mono" style="color:red">Error: ${e.message}</td></tr>`;
+            debugError("Error rendering row", idx, g, e);
+            return `<tr><td colspan="7" class="mono" style="color:red">Error: ${escapeHtml(e.message)}</td></tr>`;
           }
-        }).join("");     
- }
-
+        }).join("");
+      
+        setRowsHtml(rowsHtml);
+      }
+      
+      function clearReconnectTimers() {
+        if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
+        if (state.staleTimer) clearInterval(state.staleTimer);
+        state.reconnectTimer = null;
+        state.staleTimer = null;
+      }
+      
+      function scheduleReconnect(reason = "reconnect") {
+        if (state.manualDisconnect) return;
+        if (state.reconnectTimer) return;
+      
+        const attempts = Math.min(state.reconnectAttempts, 8);
+        const delay = Math.min(30000, 1500 * Math.pow(1.8, attempts));
+      
+        state.reconnectAttempts += 1;
+        els.status.textContent = `${reason} — reconnecting in ${Math.round(delay / 1000)}s …`;
+      
+        state.reconnectTimer = setTimeout(() => {
+          state.reconnectTimer = null;
+          connect();
+        }, delay);
+      }
+      
+      function startStaleWatch() {
+        if (state.staleTimer) clearInterval(state.staleTimer);
+      
+        state.staleTimer = setInterval(() => {
+          if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+      
+          const age = Date.now() - (state.lastMessageAt || 0);
+          const staleAfter = 60000;
+      
+          if (state.lastMessageAt && age > staleAfter) {
+            try { state.ws.close(); } catch {}
+            scheduleReconnect("stale connection");
+          }
+        }, 10000);
+      }
+      
       function cleanupWs() {
+        clearReconnectTimers();
         if (!state.ws) return;
         try { state.ws.close(); } catch {}
         state.ws = null;
       }
-
+      
       function connect() {
-        cleanupWs();
+        clearReconnectTimers();
+      
         const worker = els.worker.value || "w0";
         const url = `wss://openfront.io/${worker}/lobbies`;
         els.status.textContent = `connecting to ${url} …`;
-
+      
         const ws = new WebSocket(url);
         state.ws = ws;
-
-        ws.onopen = () => (els.status.textContent = `connected: ${url}`);
-        ws.onclose = () => (els.status.textContent = `disconnected: ${url}`);
-        ws.onerror = () => (els.status.textContent = `ws error: ${url}`);
+        state.manualDisconnect = false;
+      
+        ws.onopen = () => {
+          state.reconnectAttempts = 0;
+          state.lastMessageAt = Date.now();
+          els.status.textContent = `connected: ${url}`;
+          startStaleWatch();
+        };
+      
+        ws.onclose = () => {
+          if (state.manualDisconnect) return;
+          els.status.textContent = `disconnected: ${url}`;
+          scheduleReconnect("disconnected");
+        };
+      
+        ws.onerror = () => {
+          if (state.manualDisconnect) return;
+          els.status.textContent = `ws error: ${url}`;
+          scheduleReconnect("ws error");
+        };
+      
         ws.onmessage = (ev) => {
           try {
+            state.lastMessageAt = Date.now();
             state.payload = JSON.parse(ev.data);
-            console.log('Got payload:', state.payload); // <== Add this line
-            render();
+            debugLog("Got payload:", state.payload);
+            scheduleRender();
           } catch {}
         };
       }
-
+      
       function wireInputs() {
-        const rerender = () => render();
+        const rerender = () => scheduleRender();
         const refilter = () => {
+          leaveProfileModeOnManualChange();
           resetAlertBaseline();
-          render();
+          scheduleRender();
         };
-
+      
         [
           els.type,
           els.teamsFilter,
@@ -1429,50 +2064,77 @@ const isNewMatchFlash = state.flashIds.has(String(gameID));
           el.addEventListener("input", refilter);
           el.addEventListener("change", refilter);
         });
-
+      
         els.sort.addEventListener("input", rerender);
         els.sort.addEventListener("change", rerender);
-
+      
         els.worker.addEventListener("change", () => {
+          state.manualDisconnect = true;
+          cleanupWs();
           state.alertBaselineReady = false;
           state.alertPrevIds = new Set();
-          connect();
+      
+          setTimeout(() => {
+            state.manualDisconnect = false;
+            connect();
+          }, 100);
         });
-
+      
         els.alertToggle.addEventListener("click", () => {
           setAlertsEnabled(!state.alertsEnabled);
         });
 
+        els.profileSave.addEventListener("click", saveCurrentProfile);
+        els.profileDelete.addEventListener("click", deleteSelectedProfile);
+      
         els.reset.addEventListener("click", () => {
+          clearActiveProfiles();
+          els.profileName.value = "";
           els.type.value = "all";
           els.teamsFilter.value = "any";
+          state.teamFilters = new Set(["any"]);
           els.hideEmpty.value = "no";
           els.sort.value = "players_desc";
-
+      
           els.minJoined.value = "";
           els.maxJoined.value = "";
           els.maxPlayersEq.value = "";
           els.minMaxPlayers.value = "";
           els.maxMaxPlayers.value = "";
-
+      
           initTriState();
           renderModFiltersUI();
           resetAlertBaseline();
-          render();
-
+          scheduleRender();
+      
           els.type.dispatchEvent(new Event("change", { bubbles: true }));
           els.teamsFilter.dispatchEvent(new Event("change", { bubbles: true }));
           els.hideEmpty.dispatchEvent(new Event("change", { bubbles: true }));
           els.sort.dispatchEvent(new Event("change", { bubbles: true }));
         });
       }
-
+      
       initCustomSelects();
       initTriState();
-      renderModFiltersUI();
+
+      const savedActiveProfiles = getSavedActiveProfileNames();
+      state.activeProfiles = new Set(savedActiveProfiles);
+      state.profileSelectionOrder = savedActiveProfiles.slice();
+      refreshProfileSelect();
+
+      const lastSavedProfileName = state.profileSelectionOrder.at(-1);
+      const lastSavedProfile = getStoredProfiles().find((profile) => profile?.name === lastSavedProfileName);
+      if (lastSavedProfile) {
+        els.profileName.value = lastSavedProfile.name;
+        applyProfileSnapshot(lastSavedProfile.filters);
+      } else {
+        renderModFiltersUI();
+      }
+
       wireInputs();
+      wireActionLinks();
       updateAlertToggleUI();
       connect();
-    </script>
+      </script>
   </body>
 </html>
