@@ -24,42 +24,79 @@
       }
 
 header {
-  padding: 10px 12px 0 12px;
-}
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 8px 12px 0 12px;
-  flex-wrap: wrap;
+  padding: 0;
 }
 
 .topbar {
+  width: 100%;
   margin: 0;
+  box-sizing: border-box;
+  background: rgba(20, 20, 24, 0.96);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.24);
   font-size: 15px;
   font-weight: 800;
 }
 
+.topbarInner {
+  width: min(1320px, calc(100% - 36px));
+  min-height: 70px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 0;
+  box-sizing: border-box;
+}
+
+.brandLogo {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  text-decoration: none;
+}
+
+.brandLogo img {
+  display: block;
+  width: 184px;
+  max-height: 48px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
 
 .counts {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 10px;
+  gap: 14px;
+  font-size: 11px;
   color: var(--muted);
   margin-left: auto;
-  margin-top: 4px;
   flex-wrap: wrap;
-}
-h1 {
-  font-size: 15px;
-  margin: 0 0 4px 0;
-  font-weight: 800;
 }
 
 .status {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .topbarInner {
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    padding: 10px 0 12px;
+  }
+
+  .counts {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
 }
 
 .wrap {
@@ -77,7 +114,8 @@ h1 {
 .row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 6px;
+  column-gap: 6px;
+  row-gap: 14px;
   align-items: end;
 }
 @media (max-width: 500px) {
@@ -251,7 +289,6 @@ tbody td {
 
 
 
-      /* Custom select */
       .csel {
         position: relative;
         width: 100%;
@@ -413,29 +450,328 @@ tbody td {
   height: 18px;
   display: block;
 }
+
+
+      .viewToggle,
+      .filtersToggle {
+        width: auto;
+        min-width: 118px;
+        padding: 9px 14px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .filtersToggle { display: none; }
+
+      .cardView {
+        display: none;
+      }
+
+      .cardGrid {
+        width: min(1240px, 100%);
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .gameCard {
+        position: relative;
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 13px;
+        background: rgba(8, 14, 23, 0.94);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+        cursor: pointer;
+        transform: translateZ(0);
+        transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+      }
+
+      .gameCard:hover,
+      .gameCard:focus-visible {
+        transform: translateY(-2px);
+        border-color: rgba(98, 176, 255, 0.72);
+        box-shadow: 0 15px 34px rgba(0, 0, 0, 0.46), 0 0 0 2px rgba(98, 176, 255, 0.10);
+        outline: none;
+      }
+
+      .gameCard.newMatchFlash {
+        animation: cardMatchFlash 1400ms ease-in-out 0s 4;
+      }
+
+      @keyframes cardMatchFlash {
+        0%, 100% { box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34); }
+        45% { box-shadow: 0 0 0 3px rgba(98,176,255,0.55), 0 18px 36px rgba(0,0,0,0.48); }
+      }
+
+      .gameCardImage {
+        position: relative;
+        height: 190px;
+        overflow: hidden;
+        background: linear-gradient(135deg, #17253a, #0b111b);
+      }
+
+      .gameCardImage img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 220ms ease;
+      }
+
+      .gameCard:hover .gameCardImage img {
+        transform: scale(1.025);
+      }
+
+      .gameCardImage::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to bottom, rgba(5, 9, 15, 0.04) 35%, rgba(5, 9, 15, 0.72) 100%);
+        pointer-events: none;
+      }
+
+      .cardBadges {
+        position: absolute;
+        top: 7px;
+        left: 7px;
+        right: 74px;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+
+      .cardBadge,
+      .cardTime,
+      .cardPlayers {
+        border-radius: 6px;
+        padding: 5px 8px;
+        font-size: 11px;
+        line-height: 1.15;
+        font-weight: 900;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: white;
+        background: rgba(7, 14, 23, 0.88);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+      }
+
+      .cardBadge {
+        background: rgba(0, 145, 225, 0.93);
+      }
+
+      .cardTime {
+        position: absolute;
+        z-index: 2;
+        top: 7px;
+        right: 7px;
+        background: rgba(0, 145, 225, 0.95);
+        text-transform: none;
+        font-size: 12px;
+      }
+
+      .cardPlayers {
+        position: absolute;
+        z-index: 2;
+        right: 7px;
+        bottom: 7px;
+        text-transform: none;
+        font-size: 12px;
+      }
+
+      .gameCardInfo {
+        min-height: 76px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 14px 13px;
+        background: linear-gradient(110deg, rgba(7, 14, 23, 0.98) 0%, rgba(14, 25, 39, 0.98) 65%, rgba(105, 111, 63, 0.82) 100%);
+      }
+
+      .gameCardText {
+        min-width: 0;
+      }
+
+      .gameCardTitle {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 17px;
+        font-weight: 950;
+        letter-spacing: 0.015em;
+        text-transform: uppercase;
+      }
+
+      .gameCardMode {
+        margin-top: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: rgba(233, 238, 247, 0.77);
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .cardActions {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+      }
+
+      .cardActions .actionLink {
+        font-size: 12px;
+        padding: 6px 0;
+      }
+
+      .cardEmpty {
+        grid-column: 1 / -1;
+        padding: 34px 18px;
+        border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 13px;
+        text-align: center;
+        color: var(--muted);
+        background: rgba(8,14,23,0.82);
+        backdrop-filter: blur(8px);
+      }
+
+      body.card-view {
+        min-height: 100vh;
+        background-color: #0a1019;
+        background-image:
+          linear-gradient(rgba(6, 11, 18, 0.48), rgba(6, 11, 18, 0.72)),
+          url("https://cdn.ofedge.io/game_assets/_assets/images/background.e795d7faa9e4.webp");
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+      }
+
+      body.card-view .topbar {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: rgba(18, 18, 22, 0.95);
+        border-bottom: 1px solid rgba(255,255,255,0.09);
+        backdrop-filter: blur(12px);
+      }
+
+      body.card-view .wrap {
+        width: min(1320px, calc(100% - 40px));
+        min-height: calc(100vh - 91px);
+        margin: 0 auto;
+        padding: 18px 0 54px;
+        box-sizing: border-box;
+      }
+
+      body.card-view .panel {
+        width: min(1240px, 100%);
+        margin: 0 auto 18px;
+        padding: 14px;
+        background: rgba(12, 20, 32, 0.92);
+        backdrop-filter: blur(11px);
+      }
+
+      body.card-view .panel label,
+      body.card-view .profileHint,
+      body.card-view .modTitle {
+        font-size: 11px;
+      }
+
+      body.card-view .panel input,
+      body.card-view .panel select,
+      body.card-view .panel button,
+      body.card-view .csel-trigger,
+      body.card-view .csel-opt {
+        min-height: 34px;
+        font-size: 12px;
+      }
+
+      body.card-view:not(.filters-open) .panel {
+        display: none;
+      }
+
+      body.card-view .filtersToggle {
+        display: inline-block;
+      }
+
+      body.card-view .tableShell {
+        display: none;
+      }
+
+      body.card-view .cardView {
+        min-height: calc(100vh - 150px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 26px 0 46px;
+        box-sizing: border-box;
+      }
+
+      body.card-view .discord-btn {
+        background: rgba(88, 101, 242, 0.86);
+      }
+
+      @media (max-width: 900px) {
+        .cardGrid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .gameCardImage {
+          height: 176px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .cardGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .gameCardImage {
+          height: 190px;
+        }
+
+        body.card-view .wrap {
+          width: min(calc(100% - 20px), 1320px);
+        }
+      }
+
     </style>
   </head>
 
   <body>
     <header class="topbar">
-        <h1>OpenFront lobbies</h1>
-        <div class="status" id="status">connecting…</div>
+      <div class="topbarInner">
+        <a class="brandLogo" href="./" aria-label="OpenFront lobbies home">
+          <img
+            src="https://cdn.ofedge.io/game_assets/_assets/images/OpenFrontLogo.032dff0bb225.svg"
+            alt="OpenFront"
+          />
+        </a>
 
-        <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
+        <div class="headerActions">
+          <div class="status" id="status">connecting…</div>
+          <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
+          <button id="openCardView" class="viewToggle" type="button">Card view</button>
+          <button id="toggleFilters" class="filtersToggle" type="button">Filters</button>
+        </div>
 
         <div class="counts">
           <div>total: <span id="totalCount">0</span></div>
           <div>shown: <span id="shownCount">0</span></div>
           <div>serverTime: <span id="serverTime">—</span></div>
-          <p>&copy; 2026 kale. All rights reserved.</p>
         </div>
-        <a class="discord-btn" href="https://discord.com/users/622431947339202561" target="_blank" rel="noreferrer">
+
+        <a class="discord-btn" href="https://discord.com/users/622431947339202561" target="_blank" rel="noreferrer" aria-label="Discord">
           <img
             class="discord-icon"
             src="https://cdn.simpleicons.org/discord/white"
-            alt="Discord"
+            alt=""
           />
         </a>
+      </div>
     </header>
     
     <div class="wrap">
@@ -516,20 +852,17 @@ tbody td {
           <div>
             <label for="sort">Sort</label>
             <select id="sort" hidden>
-              <option value="players_desc" selected>Players ↓</option>
+              <option value="players_desc">Players ↓</option>
               <option value="players_asc">Players ↑</option>
               <option value="maxPlayers_desc">Max Players ↓</option>
               <option value="maxPlayers_asc">Max Players ↑</option>
-              <option value="starts_asc">Starts Soonest</option>
+              <option value="starts_asc" selected>Starts Soonest</option>
               <option value="map_asc">Map A→Z</option>
             </select>
             <div class="csel" data-select="sort"></div>
           </div>
         </div>
 
-        <div class="row" style="margin-top: 10px">
-          
-        </div>
 
         <div class="profileRow">
           <div>
@@ -550,12 +883,17 @@ tbody td {
             <button id="profileDelete" type="button">Delete</button>
           </div>
         </div>
-        <div class="profileHint">Click profiles to load them instantly. Multiple active profiles are ORed. Clear them to use the filters manually.</div>
 
         <div class="modsRow" id="modFilters"></div>
       </div>
 
-      <div style="overflow:auto; border-radius:12px;">
+      <div id="cardView" class="cardView">
+        <div id="cardGrid" class="cardGrid">
+          <div class="cardEmpty mono">waiting for data…</div>
+        </div>
+      </div>
+
+      <div id="tableView" class="tableShell" style="overflow:auto; border-radius:12px;">
         <table>
           <thead>
             <tr>
@@ -576,6 +914,10 @@ tbody td {
     </div>
 
     <script>
+      const CARD_VIEW_MODE = new URLSearchParams(window.location.search).get("view") === "cards";
+      const CARD_FILTER_STORAGE_KEY = "openfrontPendingCardViewFilters";
+      document.body.classList.toggle("card-view", CARD_VIEW_MODE);
+
       const DEBUG = false;
       const debugLog = (...args) => {
         if (DEBUG) console.log(...args);
@@ -928,7 +1270,12 @@ tbody td {
         shownCount: $("shownCount"),
         serverTime: $("serverTime"),
         rows: $("rows"),
+        cardGrid: $("cardGrid"),
+        tableView: $("tableView"),
+        cardView: $("cardView"),
         alertToggle: $("alertToggle"),
+        openCardView: $("openCardView"),
+        toggleFilters: $("toggleFilters"),
       };
       
       const state = {
@@ -952,6 +1299,7 @@ tbody td {
         audioCtx: null,
         renderScheduled: false,
         lastRowsHtml: "",
+        lastCardsHtml: "",
         clickedLinks: new Map(),
       
         reconnectTimer: null,
@@ -1057,7 +1405,7 @@ tbody td {
           type: value.type || "all",
           hideEmpty: value.hideEmpty === true,
           teamFilters: Array.isArray(value.teamFilters) ? value.teamFilters.filter((item) => item && item !== "any") : [],
-          sort: value.sort || "players_desc",
+          sort: value.sort || "starts_asc",
           minJoined: value.minJoined ?? null,
           maxJoined: value.maxJoined ?? null,
           maxPlayersEq: value.maxPlayersEq ?? null,
@@ -1259,16 +1607,32 @@ tbody td {
       }
       
       function wireActionLinks() {
-        els.rows.addEventListener("click", (e) => {
+        const handleActionClick = (e) => {
           const actionLink = e.target.closest("a[data-action-key]");
-          if (!actionLink) return;
+          if (actionLink) {
+            markActionClicked(actionLink);
       
-          markActionClicked(actionLink);
-      
-          if (actionLink.dataset.copyUrl) {
-            e.preventDefault();
-            copyText(actionLink.dataset.copyUrl).catch(() => {});
+            if (actionLink.dataset.copyUrl) {
+              e.preventDefault();
+              copyText(actionLink.dataset.copyUrl).catch(() => {});
+            }
+            return;
           }
+
+          const card = e.target.closest(".gameCard[data-join-url]");
+          if (!card) return;
+          window.open(card.dataset.joinUrl, "_blank", "noopener,noreferrer");
+        };
+
+        els.rows.addEventListener("click", handleActionClick);
+        els.cardGrid.addEventListener("click", handleActionClick);
+        els.cardGrid.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          if (e.target.closest("a, button")) return;
+          const card = e.target.closest(".gameCard[data-join-url]");
+          if (!card) return;
+          e.preventDefault();
+          window.open(card.dataset.joinUrl, "_blank", "noopener,noreferrer");
         });
       }
       
@@ -1405,13 +1769,10 @@ function matchModifierFilters(g, triState = state.tri) {
     }
   }
 
-  // NEED filters are hard requirements
   if (hasNeed) return allNeedMatched;
 
-  // If there are no NEED filters, IN behaves as OR
   if (hasIn) return anyInMatched;
 
-  // No modifier filters selected
   return true;
 }
       function renderModFiltersUI() {
@@ -1670,6 +2031,12 @@ function matchModifierFilters(g, triState = state.tri) {
         els.rows.innerHTML = html;
         state.lastRowsHtml = html;
       }
+
+      function setCardsHtml(html) {
+        if (state.lastCardsHtml === html) return;
+        els.cardGrid.innerHTML = html;
+        state.lastCardsHtml = html;
+      }
       
       function scheduleRender() {
         if (state.renderScheduled) return;
@@ -1921,6 +2288,90 @@ function matchModifierFilters(g, triState = state.tri) {
         `;
       }
       
+      function compactNumber(value) {
+        if (!Number.isFinite(value)) return null;
+        if (Math.abs(value) >= 1000000) {
+          const n = value / 1000000;
+          return `${Number.isInteger(n) ? n : n.toFixed(1).replace(/\.0$/, "")}M`;
+        }
+        if (Math.abs(value) >= 1000) {
+          const n = value / 1000;
+          return `${Number.isInteger(n) ? n : n.toFixed(1).replace(/\.0$/, "")}K`;
+        }
+        return String(value);
+      }
+
+      function cardBadgeLabels(g) {
+        const labels = [];
+        const startingGold = getNumber(g.raw, "startingGold");
+        const goldMultiplier = getNumber(g.raw, "goldMultiplier");
+
+        if (Number.isFinite(startingGold)) labels.push(`${compactNumber(startingGold)} Starting Gold`);
+        if (Number.isFinite(goldMultiplier) && goldMultiplier !== 1) labels.push(`${goldMultiplier}× Gold`);
+        if (g.pm?.isCompact === true) labels.push("Compact");
+        if (g.pm?.isCrowded === true) labels.push("Crowded");
+        if (g.pm?.isRandomSpawn === true || g.cfg?.randomSpawn === true) labels.push("Random Spawn");
+        if (g.pm?.isHardNations === true) labels.push("Hard Nations");
+
+        return labels.slice(0, 2);
+      }
+
+      function formatCardStarts(g, serverTime) {
+        if (!g.startsAt || !serverTime) return "—";
+        const deltaS = Math.round((g.startsAt - serverTime) / 1000);
+        return deltaS > 0 ? formatDuration(deltaS) : "Started";
+      }
+
+      function cardHtml(g, serverTime) {
+        const gameID = g.id || "";
+        const joinUrl = getJoinUrl(gameID);
+        const map = String(g.map ?? "—");
+        const thumbUrl = getMapThumbnailUrl(map);
+        const maxPlayers = g.maxPlayers;
+        const isNewMatchFlash = state.flashIds.has(String(gameID));
+        const joinKey = `join:${gameID}`;
+        const copyKey = `copy:${gameID}`;
+        const joinClicked = isActionClicked(joinKey);
+        const copyClicked = isActionClicked(copyKey);
+        const badges = cardBadgeLabels(g)
+          .map((label) => `<span class="cardBadge">${escapeHtml(label)}</span>`)
+          .join("");
+
+        return `
+          <article
+            class="gameCard ${isNewMatchFlash ? "newMatchFlash" : ""}"
+            tabindex="0"
+            role="link"
+            aria-label="Join ${escapeHtml(map)}"
+            data-join-url="${escapeHtml(joinUrl)}"
+            title="${escapeHtml(gameID)}"
+          >
+            <div class="gameCardImage">
+              <img
+                src="${thumbUrl}"
+                alt="${escapeHtml(map)} map"
+                loading="lazy"
+                decoding="async"
+                onerror="this.onerror=null;this.style.opacity='0';"
+              >
+              <div class="cardBadges">${badges}</div>
+              <div class="cardTime">${escapeHtml(formatCardStarts(g, serverTime))}</div>
+              <div class="cardPlayers">${escapeHtml(String(g.joined ?? 0))}${maxPlayers !== null ? "/" + escapeHtml(String(maxPlayers)) : ""} 👥</div>
+            </div>
+            <div class="gameCardInfo">
+              <div class="gameCardText">
+                <div class="gameCardTitle">${escapeHtml(map)}</div>
+                <div class="gameCardMode">${escapeHtml(modeSummaryLine(g))}</div>
+              </div>
+              <div class="cardActions">
+                <a class="actionLink joinLink ${joinClicked ? "clicked" : ""}" href="${joinUrl}" target="_blank" rel="noreferrer" data-action-key="${escapeHtml(joinKey)}">Join</a>
+                <a class="actionLink copyLink ${copyClicked ? "clicked" : ""}" href="#" data-action-key="${escapeHtml(copyKey)}" data-copy-url="${escapeHtml(joinUrl)}" title="Copy game link">Copy</a>
+              </div>
+            </div>
+          </article>
+        `;
+      }
+
       function render() {
         if (!state.payload) return;
       
@@ -1942,6 +2393,20 @@ function matchModifierFilters(g, triState = state.tri) {
       
         if (sorted.length === 0) {
           setRowsHtml(`<tr><td colspan="7" class="mono">no matches</td></tr>`);
+          setCardsHtml(`<div class="cardEmpty mono">no matches</div>`);
+          return;
+        }
+
+        if (CARD_VIEW_MODE) {
+          const cardsHtml = sorted.map((g, idx) => {
+            try {
+              return cardHtml(g, serverTime);
+            } catch (e) {
+              debugError("Error rendering card", idx, g, e);
+              return `<div class="cardEmpty mono" style="color:#ff8f8f">Error: ${escapeHtml(e.message)}</div>`;
+            }
+          }).join("");
+          setCardsHtml(cardsHtml);
           return;
         }
       
@@ -2084,6 +2549,31 @@ function matchModifierFilters(g, triState = state.tri) {
           setAlertsEnabled(!state.alertsEnabled);
         });
 
+        els.openCardView.addEventListener("click", () => {
+          const url = new URL(window.location.href);
+
+          if (CARD_VIEW_MODE) {
+            url.searchParams.delete("view");
+            window.location.href = url.href;
+            return;
+          }
+
+          try {
+            localStorage.setItem(CARD_FILTER_STORAGE_KEY, JSON.stringify({
+              createdAt: Date.now(),
+              filters: getProfileSnapshot(),
+            }));
+          } catch {}
+
+          url.searchParams.set("view", "cards");
+          window.location.assign(url.href);
+        });
+
+        els.toggleFilters.addEventListener("click", () => {
+          document.body.classList.toggle("filters-open");
+          els.toggleFilters.textContent = document.body.classList.contains("filters-open") ? "Hide filters" : "Filters";
+        });
+
         els.profileSave.addEventListener("click", saveCurrentProfile);
         els.profileDelete.addEventListener("click", deleteSelectedProfile);
       
@@ -2094,7 +2584,7 @@ function matchModifierFilters(g, triState = state.tri) {
           els.teamsFilter.value = "any";
           state.teamFilters = new Set(["any"]);
           els.hideEmpty.value = "no";
-          els.sort.value = "players_desc";
+          els.sort.value = "starts_asc";
       
           els.minJoined.value = "";
           els.maxJoined.value = "";
@@ -2117,6 +2607,8 @@ function matchModifierFilters(g, triState = state.tri) {
       initCustomSelects();
       initTriState();
 
+      els.openCardView.textContent = CARD_VIEW_MODE ? "Back to table" : "Card view";
+
       const savedActiveProfiles = getSavedActiveProfileNames();
       state.activeProfiles = new Set(savedActiveProfiles);
       state.profileSelectionOrder = savedActiveProfiles.slice();
@@ -2129,6 +2621,16 @@ function matchModifierFilters(g, triState = state.tri) {
         applyProfileSnapshot(lastSavedProfile.filters);
       } else {
         renderModFiltersUI();
+
+        if (CARD_VIEW_MODE) {
+          try {
+            const pending = JSON.parse(localStorage.getItem(CARD_FILTER_STORAGE_KEY) || "null");
+            if (pending?.filters && Date.now() - Number(pending.createdAt || 0) < 120000) {
+              applyProfileSnapshot(pending.filters);
+            }
+            localStorage.removeItem(CARD_FILTER_STORAGE_KEY);
+          } catch {}
+        }
       }
 
       wireInputs();
