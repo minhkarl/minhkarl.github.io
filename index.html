@@ -7,128 +7,329 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0b0f17;
+
+        --bg: #090d15;
+        --bg-2: #0c121d;
         --panel: #121a27;
-        --muted: #93a4be;
+        --panel-2: #16202f;
+        --elev: #0d1420;
+
         --text: #e9eef7;
+        --muted: #93a4be;
+        --faint: #6b7c96;
+
         --border: rgba(255, 255, 255, 0.08);
-        --border2: rgba(255, 255, 255, 0.12);
+        --border2: rgba(255, 255, 255, 0.14);
+
         --accent: #62b0ff;
+        --accent-strong: #8cc9ff;
+        --accent-bg: rgba(98, 176, 255, 0.10);
+        --accent-bg-2: rgba(98, 176, 255, 0.18);
+        --accent-ring: rgba(98, 176, 255, 0.16);
+
+        --ok: #4ade80;
+        --warn: #fbbf24;
+        --danger: #f87171;
+
+        --r-sm: 8px;
+        --r-md: 10px;
+        --r-lg: 14px;
+        --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-2: 0 10px 30px rgba(0, 0, 0, 0.28);
+        --shadow-3: 0 18px 44px rgba(0, 0, 0, 0.46);
+
+        --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
       }
+
+      * { box-sizing: border-box; }
 
       body {
         margin: 0;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
-        background: var(--bg);
+        font-family: var(--font-sans);
+        background-color: var(--bg);
+        background-image:
+          radial-gradient(1200px 600px at 80% -10%, rgba(98, 176, 255, 0.10), transparent 60%),
+          radial-gradient(900px 520px at 0% 0%, rgba(98, 176, 255, 0.05), transparent 55%),
+          linear-gradient(180deg, var(--bg-2), var(--bg) 340px);
+        background-attachment: fixed;
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+
+      /* keep the editable filter fields selectable */
+      input,
+      textarea {
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+        user-select: text;
+      }
+
+      /* images are decorative — never draggable */
+      img {
+        -webkit-user-drag: none;
+        -webkit-touch-callout: none;
+      }
+
+      .mono {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      ::selection { background: rgba(98, 176, 255, 0.30); }
+
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+      }
+      *::-webkit-scrollbar { width: 10px; height: 10px; }
+      *::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      *::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.26);
+        background-clip: content-box;
+      }
+
+      header {
+        padding: 0;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        width: 100%;
+        margin: 0;
+        box-sizing: border-box;
+        background: rgba(11, 16, 24, 0.82);
+        backdrop-filter: blur(14px) saturate(140%);
+        -webkit-backdrop-filter: blur(14px) saturate(140%);
+        border-bottom: 1px solid var(--border);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+        font-size: 15px;
+        font-weight: 800;
+      }
+
+      .topbarInner {
+        width: min(1320px, calc(100% - 36px));
+        min-height: 64px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 10px 0;
+        box-sizing: border-box;
+      }
+
+      .brandLogo {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        text-decoration: none;
+        opacity: 0.96;
+        transition: opacity 150ms ease, transform 150ms ease;
+      }
+
+      .brandLogo:hover { opacity: 1; transform: translateY(-1px); }
+
+      .brandLogo img {
+        display: block;
+        width: 184px;
+        max-height: 48px;
+      }
+
+      .headerActions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .counts {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--muted);
+        margin-left: auto;
+        flex-wrap: wrap;
+      }
+
+      /* shared pill for the status + server-time chips (matched height) */
+      .counts > div {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 35px;
+        padding: 0 13px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        white-space: nowrap;
+      }
+
+      .counts span {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        font-weight: 800;
         color: var(--text);
       }
 
-header {
-  padding: 0;
-}
+      #status {
+        font-weight: 700;
+      }
 
-.topbar {
-  width: 100%;
-  margin: 0;
-  box-sizing: border-box;
-  background: rgba(20, 20, 24, 0.96);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.24);
-  font-size: 15px;
-  font-weight: 800;
-}
+      #status::before {
+        content: "";
+        flex: 0 0 auto;
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        color: var(--accent);
+        background: currentColor;
+        box-shadow: 0 0 7px 0 currentColor;
+        animation: statusPulse 2.4s ease-in-out infinite;
+      }
 
-.topbarInner {
-  width: min(1320px, calc(100% - 36px));
-  min-height: 70px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 10px 0;
-  box-sizing: border-box;
-}
+      #status.is-live::before { color: var(--ok); }
+      #status.is-connecting::before { color: var(--warn); }
+      #status.is-offline::before { color: var(--danger); animation: none; opacity: 1; }
 
-.brandLogo {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  text-decoration: none;
-}
+      @keyframes statusPulse {
+        0%, 100% { opacity: 0.5; }
+        50% { opacity: 1; }
+      }
 
-.brandLogo img {
-  display: block;
-  width: 184px;
-  max-height: 48px;
-}
+      @media (max-width: 900px) {
+        .topbarInner {
+          flex-wrap: wrap;
+          gap: 10px 12px;
+          padding: 10px 0 12px;
+        }
 
-.headerActions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
+        /* Row 1: logo + Discord (pushed right) */
+        .discordGroup {
+          order: 1;
+          margin-left: auto;
+        }
 
-.counts {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 11px;
-  color: var(--muted);
-  margin-left: auto;
-  flex-wrap: wrap;
-}
+        /* Row 2: action buttons */
+        .headerActions {
+          order: 2;
+          width: 100%;
+        }
 
-.status {
-  color: var(--muted);
-  font-size: 11px;
-  white-space: nowrap;
-}
+        /* Row 3: status + server time */
+        .counts {
+          order: 3;
+          width: 100%;
+          margin-left: 0;
+        }
+      }
 
-@media (max-width: 900px) {
-  .topbarInner {
-    flex-wrap: wrap;
-    gap: 10px 14px;
-    padding: 10px 0 12px;
-  }
+      .wrap {
+        padding: 14px 10px 28px;
+        display: grid;
+        gap: 12px;
+      }
 
-  .counts {
-    order: 3;
-    width: 100%;
-    margin-left: 0;
-  }
-}
+      .panel {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+          var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 16px 16px 18px;
+        box-shadow: var(--shadow-1);
+      }
 
-.wrap {
-  padding: 10px;
-  display: grid;
-  gap: 8px;
-}
+      .panelHead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 13px;
+        border-bottom: 1px solid var(--border);
+      }
 
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px;
-}
-.row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  column-gap: 6px;
-  row-gap: 14px;
-  align-items: end;
-}
-@media (max-width: 500px) {
-  .row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
+      .panelTitle {
+        font-size: 13px;
+        font-weight: 900;
+        letter-spacing: 0.10em;
+        text-transform: uppercase;
+        color: var(--text);
+      }
+
+      .resetBtn {
+        width: auto;
+        flex: 0 0 auto;
+        padding: 8px 14px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .filterGroup { margin-top: 18px; }
+      .filterGroup:first-of-type { margin-top: 0; }
+
+      .filterGroup > .row,
+      .filterGroup > .profileRow,
+      .filterGroup > .modsRow {
+        margin-top: 0;
+      }
+
+      .groupLabel {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 11px;
+      }
+
+      .groupLabel::after {
+        content: "";
+        flex: 1 1 auto;
+        height: 1px;
+        background: linear-gradient(90deg, var(--border2), transparent);
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        column-gap: 10px;
+        row-gap: 14px;
+        align-items: end;
+      }
+      @media (max-width: 500px) {
+        .row {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
 
 label {
   display: block;
   font-size: 10px;
-  color: var(--muted);
-  margin-bottom: 3px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 5px;
 }
 
 input,
@@ -136,39 +337,54 @@ select,
 button {
   width: 100%;
   box-sizing: border-box;
-  padding: 5px 7px;
-  border-radius: 8px;
+  padding: 7px 9px;
+  border-radius: var(--r-sm);
   border: 1px solid var(--border);
   background: rgba(255,255,255,0.04);
   color: var(--text);
   outline: none;
-  font-size: 11px;
+  font-size: 12px;
+  font-family: inherit;
+  transition: border-color 130ms ease, background 130ms ease, box-shadow 130ms ease;
+}
+
+input::placeholder { color: var(--faint); }
+
+input[type="number"] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+input:hover,
+select:hover {
+  border-color: var(--border2);
+  background: rgba(255,255,255,0.06);
 }
 
 button {
   cursor: pointer;
   font-weight: 700;
-  background: rgba(98,176,255,0.10);
+  background: var(--accent-bg);
+  border-color: rgba(98,176,255,0.22);
 }
 
-      input:focus, select:focus, button:focus {
+      input:focus, select:focus, button:focus-visible {
         border-color: rgba(98,176,255,0.60);
-        box-shadow: 0 0 0 3px rgba(98,176,255,0.14);
+        box-shadow: 0 0 0 3px var(--accent-ring);
       }
 
       button:hover {
-        border-color: rgba(98,176,255,0.35);
-        background: rgba(98,176,255,0.18);
+        border-color: rgba(98,176,255,0.45);
+        background: var(--accent-bg-2);
       }
 
-
-
+      button:active { transform: translateY(1px); }
 
 .profileRow {
-  margin-top: 8px;
+  margin-top: 12px;
   display: grid;
   grid-template-columns: minmax(130px, 1.4fr) minmax(160px, 1.8fr) repeat(2, minmax(72px, 0.7fr));
-  gap: 6px;
+  gap: 10px;
   align-items: end;
 }
 
@@ -178,114 +394,80 @@ button {
   }
 }
 
-.profileHint {
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 10px;
-}
 
 .modsRow {
-  margin-top: 6px;
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  gap: 8px;
 }
 
 .modBox {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px;
+  border-radius: var(--r-md);
+  padding: 9px 10px;
+  background: rgba(255,255,255,0.025);
+  transition: border-color 130ms ease, background 130ms ease;
+}
+
+.modBox:hover {
+  border-color: var(--border2);
+  background: rgba(255,255,255,0.05);
 }
 
 .modTitle {
   font-size: 10px;
   font-weight: 800;
-  margin-bottom: 5px;
+  letter-spacing: 0.02em;
+  margin-bottom: 7px;
+  color: var(--muted);
 }
 
 .triBtns {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
 }
 
 .triBtn {
-  padding: 4px 4px;
-  border-radius: 6px;
+  min-width: 0;
+  padding: 6px 4px;
+  border-radius: 7px;
   border: 1px solid var(--border);
   background: rgba(255,255,255,0.03);
-  font-weight: 800;
-  font-size: 10px;
-  user-select: none;
-}
-
-      .triBtn.active {
-        border-color: rgba(98,176,255,0.6);
-        background: rgba(98,176,255,0.18);
-      }
-
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        overflow: hidden;
-        table-layout: fixed;
-      }
-
-thead th {
-  text-align: left;
-  font-size: 10px;
   color: var(--muted);
   font-weight: 800;
-  padding: 7px;
-  border-bottom: 1px solid var(--border);
-}
-
-tbody td {
-  padding: 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  vertical-align: top;
   font-size: 11px;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: nowrap;
+  user-select: none;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
 }
 
-
-      tbody tr:hover { background: rgba(255,255,255,0.03); }
-
-      .joinActions {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        flex-wrap: wrap;
+      .triBtn:hover {
+        border-color: var(--border2);
+        background: rgba(255,255,255,0.06);
+        color: var(--text);
       }
 
-      .actionLink,
-      .actionLink:visited {
-        color: var(--accent);
-        text-decoration: none;
-        font-weight: 900;
-        white-space: nowrap;
+      .triBtn.active[data-val="any"] {
+        border-color: var(--border2);
+        background: rgba(255,255,255,0.12);
+        color: var(--text);
       }
 
-      .actionLink:hover {
-        text-decoration: underline;
+      .triBtn.active[data-val="yes"] {
+        border-color: rgba(74,222,128,0.55);
+        background: rgba(74,222,128,0.18);
+        color: #9af3bd;
       }
 
-      .actionLink.clicked,
-      .actionLink.clicked:visited {
-        color: #8cc9ff;
+      .triBtn.active[data-val="no"] {
+        border-color: rgba(248,113,113,0.55);
+        background: rgba(248,113,113,0.16);
+        color: #ffb4b4;
       }
 
-      .tags { display: flex; flex-wrap: wrap; gap: 6px; }
-
-      .tag {
-        font-size: 12px;
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 2px 8px;
-        background: rgba(255,255,255,0.03);
-      }
 
 
 
@@ -304,34 +486,41 @@ tbody td {
   font-weight: 700;
   background: rgba(255,255,255,0.04);
   border: 1px solid var(--border2);
-  padding: 5px 28px 5px 8px;
-  border-radius: 8px;
+  padding: 7px 30px 7px 10px;
+  border-radius: var(--r-sm);
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
+  transition: border-color 130ms ease, background 130ms ease, box-shadow 130ms ease;
+}
+
+.csel-trigger:hover {
+  border-color: rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.06);
 }
 
 .csel-opt {
   width: 100%;
   border: 0;
   background: transparent;
-  padding: 6px 8px;
-  border-radius: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
   color: var(--text);
   cursor: pointer;
   font-weight: 700;
   text-align: left;
-  font-size: 11px;
+  font-size: 12px;
+  transition: background 110ms ease;
 }
 
       .csel-trigger::after {
         content: "";
         position: absolute;
-        right: 14px;
+        right: 13px;
         top: 50%;
         width: 8px;
         height: 8px;
-        border-right: 2px solid rgba(233,238,247,0.75);
-        border-bottom: 2px solid rgba(233,238,247,0.75);
+        border-right: 2px solid rgba(233,238,247,0.7);
+        border-bottom: 2px solid rgba(233,238,247,0.7);
         transform: translateY(-60%) rotate(45deg);
         transition: transform 250ms ease;
         pointer-events: none;
@@ -339,7 +528,7 @@ tbody td {
 
       .csel.open .csel-trigger {
         border-color: rgba(98,176,255,0.55);
-        box-shadow: 0 0 0 3px rgba(98,176,255,0.12);
+        box-shadow: 0 0 0 3px var(--accent-ring);
       }
 
       .csel.open .csel-trigger::after {
@@ -352,43 +541,51 @@ tbody td {
         left: 0;
         right: 0;
         top: calc(100% + 6px);
-        background: #0d1420;
+        background: var(--elev);
         border: 1px solid var(--border2);
-        border-radius: 12px;
+        border-radius: var(--r-md);
         padding: 6px;
         z-index: 9999;
         max-height: 320px;
         overflow: auto;
+        box-shadow: var(--shadow-3);
       }
 
-      .csel.open .csel-list { display: block; }
+      .csel.open .csel-list {
+        display: block;
+        animation: cselIn 140ms ease;
+      }
 
+      @keyframes cselIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
 
-
-      .csel-opt:hover { background: rgba(255,255,255,0.06); }
+      .csel-opt:hover { background: rgba(255,255,255,0.07); }
 
       .csel-opt[aria-selected="true"] {
-        background: rgba(98,176,255,0.16);
-        outline: 1px solid rgba(98,176,255,0.35);
+        background: var(--accent-bg-2);
+        box-shadow: inset 0 0 0 1px rgba(98,176,255,0.35);
       }
 
       .csel[data-select="teamsFilter"] .csel-opt[aria-selected="true"]::before,
       .csel[data-select="profileSelect"] .csel-opt[aria-selected="true"]::before {
         content: "✓ ";
+        color: var(--accent);
       }
 
       .csel-sep {
-        margin: 6px 6px;
+        margin: 6px;
         height: 1px;
-        background: rgba(255,255,255,0.06);
+        background: rgba(255,255,255,0.07);
       }
 
       .csel-group {
-        font-size: 11px;
-        letter-spacing: 0.02em;
-        color: rgba(147,164,190,0.95);
-        font-weight: 900;
-        padding: 8px 10px 4px 10px;
+        font-size: 10px;
+        letter-spacing: 0.05em;
+        color: var(--faint);
+        font-weight: 800;
+        padding: 9px 10px 4px;
         text-transform: uppercase;
       }
 
@@ -396,25 +593,22 @@ tbody td {
 
       .alertToggle {
         width: auto;
-        min-width: 110px;
-        padding: 6px 10px;
-        border-color: rgba(255,255,255,0.14);
+        min-width: 112px;
+        padding: 8px 12px;
+        border-color: var(--border2);
         background: rgba(255,255,255,0.05);
         white-space: nowrap;
       }
 
       .alertToggle.on {
         border-color: rgba(98,176,255,0.7);
-        background: rgba(98,176,255,0.20);
+        background: var(--accent-bg-2);
         color: #ffffff;
+        box-shadow: 0 0 0 1px rgba(98,176,255,0.25), 0 0 18px rgba(98,176,255,0.18);
       }
 
       .alertToggle.flash {
         animation: alertButtonPulse 700ms ease-in-out 0s 6;
-      }
-
-      tbody tr.newMatchFlash td {
-        animation: newMatchFlash 1400ms ease-in-out 0s 4;
       }
 
       @keyframes alertButtonPulse {
@@ -422,41 +616,54 @@ tbody td {
         50% { box-shadow: 0 0 0 5px rgba(98,176,255,0.22); }
       }
 
-      @keyframes newMatchFlash {
-        0%, 100% { background: transparent; }
-        45% { background: rgba(98,176,255,0.20); }
+      .discordGroup {
+        display: flex;
+        flex: 0 0 auto;
+        gap: 8px;
       }
 
       .discord-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  width: auto;
-  padding: 7px 12px;
-  border-radius: 8px;
-  background: #5865f2;
-  color: white;
-  text-decoration: none;
-  font-weight: 800;
-  border: 0;
-}
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        width: auto;
+        min-width: 58px;
+        padding: 6px 10px;
+        border-radius: var(--r-sm);
+        background: #5865f2;
+        color: white;
+        text-decoration: none;
+        font-weight: 800;
+        border: 0;
+        box-shadow: 0 6px 18px rgba(88,101,242,0.35);
+        transition: transform 130ms ease, box-shadow 130ms ease, background 130ms ease;
+      }
 
-.discord-btn:hover {
-  opacity: 0.85;
-}
+      .discord-btn:hover {
+        background: #6b76f5;
+        transform: translateY(-1px);
+        box-shadow: 0 10px 24px rgba(88,101,242,0.45);
+      }
 
-.discord-icon {
-  width: 18px;
-  height: 18px;
-  display: block;
-}
+      .discord-icon {
+        width: 18px;
+        height: 18px;
+        display: block;
+      }
+
+      .discord-name {
+        font-size: 10px;
+        line-height: 1;
+        letter-spacing: 0.04em;
+      }
 
 
-      .viewToggle,
       .filtersToggle {
         width: auto;
         min-width: 118px;
-        padding: 9px 14px;
+        padding: 8px 14px;
         font-size: 12px;
         white-space: nowrap;
       }
@@ -473,26 +680,119 @@ tbody td {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 18px;
+        align-items: start;
+      }
+
+      .cardColumn {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .colHeader {
+        position: sticky;
+        top: 76px;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text);
+        background: rgba(12, 20, 32, 0.82);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-1);
+      }
+
+      .colHeader::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 10px 1px currentColor;
+      }
+
+      .colCount {
+        margin-left: auto;
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--muted);
+        padding: 2px 9px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .cardColumn[data-cat="ffa"] .colHeader::before { color: #62b0ff; background: #62b0ff; }
+      .cardColumn[data-cat="team"] .colHeader::before { color: #4ade80; background: #4ade80; }
+      .cardColumn[data-cat="special"] .colHeader::before { color: #fbbf24; background: #fbbf24; }
+
+      .cardColumn[data-cat="ffa"] .colHeader { border-color: rgba(98, 176, 255, 0.35); }
+      .cardColumn[data-cat="team"] .colHeader { border-color: rgba(74, 222, 128, 0.32); }
+      .cardColumn[data-cat="special"] .colHeader { border-color: rgba(251, 191, 36, 0.32); }
+
+      .colCards {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      .colEmpty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        min-height: 150px;
+        padding: 24px 16px;
+        border: 1px dashed rgba(255, 255, 255, 0.14);
+        border-radius: var(--r-lg);
+        background: rgba(8, 14, 23, 0.5);
+        color: var(--faint);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        text-align: center;
+      }
+
+      .spawnDot {
+        width: 26px;
+        height: 26px;
+        border-radius: 999px;
+        border: 2px solid rgba(98, 176, 255, 0.25);
+        border-top-color: var(--accent);
+        animation: spawnSpin 0.9s linear infinite;
+      }
+
+      @keyframes spawnSpin {
+        to { transform: rotate(360deg); }
       }
 
       .gameCard {
         position: relative;
         min-width: 0;
         overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        border-radius: 13px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: var(--r-lg);
         background: rgba(8, 14, 23, 0.94);
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+        box-shadow: var(--shadow-2);
         cursor: pointer;
-        transform: translateZ(0);
-        transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+        transition: border-color 160ms ease, box-shadow 160ms ease;
       }
 
       .gameCard:hover,
       .gameCard:focus-visible {
-        transform: translateY(-2px);
         border-color: rgba(98, 176, 255, 0.72);
-        box-shadow: 0 15px 34px rgba(0, 0, 0, 0.46), 0 0 0 2px rgba(98, 176, 255, 0.10);
+        box-shadow: var(--shadow-3), 0 0 0 1px rgba(98, 176, 255, 0.22);
         outline: none;
       }
 
@@ -501,7 +801,7 @@ tbody td {
       }
 
       @keyframes cardMatchFlash {
-        0%, 100% { box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34); }
+        0%, 100% { box-shadow: var(--shadow-2); }
         45% { box-shadow: 0 0 0 3px rgba(98,176,255,0.55), 0 18px 36px rgba(0,0,0,0.48); }
       }
 
@@ -517,36 +817,37 @@ tbody td {
         width: 100%;
         height: 100%;
         object-fit: cover;
-        transition: transform 220ms ease;
+        transition: transform 260ms ease;
       }
 
       .gameCard:hover .gameCardImage img {
-        transform: scale(1.025);
+        transform: scale(1.04);
       }
 
       .gameCardImage::after {
         content: "";
         position: absolute;
         inset: 0;
-        background: linear-gradient(to bottom, rgba(5, 9, 15, 0.04) 35%, rgba(5, 9, 15, 0.72) 100%);
+        background: linear-gradient(to bottom, rgba(5, 9, 15, 0.02) 30%, rgba(5, 9, 15, 0.78) 100%);
         pointer-events: none;
       }
 
       .cardBadges {
         position: absolute;
-        top: 7px;
-        left: 7px;
-        right: 74px;
+        top: 8px;
+        left: 8px;
+        right: 80px;
         z-index: 2;
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
+        align-items: flex-start;
         gap: 5px;
       }
 
       .cardBadge,
       .cardTime,
       .cardPlayers {
-        border-radius: 6px;
+        border-radius: 7px;
         padding: 5px 8px;
         font-size: 11px;
         line-height: 1.15;
@@ -554,20 +855,24 @@ tbody td {
         letter-spacing: 0.02em;
         text-transform: uppercase;
         color: white;
-        background: rgba(7, 14, 23, 0.88);
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+        background: rgba(7, 14, 23, 0.82);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
       }
 
       .cardBadge {
-        background: rgba(0, 145, 225, 0.93);
+        background: rgba(98, 176, 255, 0.92);
+        color: #07101b;
       }
 
       .cardTime {
         position: absolute;
         z-index: 2;
-        top: 7px;
-        right: 7px;
-        background: rgba(0, 145, 225, 0.95);
+        top: 8px;
+        right: 8px;
+        background: rgba(98, 176, 255, 0.95);
+        color: #07101b;
         text-transform: none;
         font-size: 12px;
       }
@@ -575,20 +880,25 @@ tbody td {
       .cardPlayers {
         position: absolute;
         z-index: 2;
-        right: 7px;
-        bottom: 7px;
+        right: 8px;
+        bottom: 8px;
         text-transform: none;
         font-size: 12px;
       }
 
       .gameCardInfo {
-        min-height: 76px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 13px 14px 14px;
+        background: linear-gradient(110deg, rgba(7, 14, 23, 0.98) 0%, rgba(14, 25, 39, 0.98) 68%, rgba(98, 176, 255, 0.12) 100%);
+      }
+
+      .gameCardTop {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 12px;
         align-items: center;
-        padding: 12px 14px 13px;
-        background: linear-gradient(110deg, rgba(7, 14, 23, 0.98) 0%, rgba(14, 25, 39, 0.98) 65%, rgba(105, 111, 63, 0.82) 100%);
       }
 
       .gameCardText {
@@ -606,35 +916,34 @@ tbody td {
       }
 
       .gameCardMode {
-        margin-top: 2px;
+        margin-top: 3px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        color: rgba(233, 238, 247, 0.77);
+        color: rgba(233, 238, 247, 0.72);
         font-size: 11px;
         font-weight: 800;
+        letter-spacing: 0.02em;
         text-transform: uppercase;
       }
 
-      .cardActions {
-        display: flex;
-        align-items: center;
-        gap: 11px;
-      }
-
-      .cardActions .actionLink {
-        font-size: 12px;
-        padding: 6px 0;
+      .cardCode {
+        flex: 0 0 auto;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: var(--muted);
+        white-space: nowrap;
       }
 
       .cardEmpty {
         grid-column: 1 / -1;
-        padding: 34px 18px;
-        border: 1px solid rgba(255,255,255,0.14);
-        border-radius: 13px;
+        padding: 38px 18px;
+        border: 1px dashed rgba(255,255,255,0.16);
+        border-radius: var(--r-lg);
         text-align: center;
         color: var(--muted);
-        background: rgba(8,14,23,0.82);
+        background: rgba(8,14,23,0.7);
         backdrop-filter: blur(8px);
       }
 
@@ -642,7 +951,7 @@ tbody td {
         min-height: 100vh;
         background-color: #0a1019;
         background-image:
-          linear-gradient(rgba(6, 11, 18, 0.48), rgba(6, 11, 18, 0.72)),
+          linear-gradient(rgba(6, 11, 18, 0.55), rgba(6, 11, 18, 0.8)),
           url("https://cdn.ofedge.io/game_assets/_assets/images/background.e795d7faa9e4.webp");
         background-size: cover;
         background-position: center;
@@ -653,9 +962,10 @@ tbody td {
         width: 100%;
         margin: 0;
         padding: 0;
-        background: rgba(18, 18, 22, 0.95);
-        border-bottom: 1px solid rgba(255,255,255,0.09);
-        backdrop-filter: blur(12px);
+        background: rgba(11, 14, 20, 0.78);
+        border-bottom: 1px solid var(--border);
+        backdrop-filter: blur(14px) saturate(140%);
+        -webkit-backdrop-filter: blur(14px) saturate(140%);
       }
 
       body.card-view .wrap {
@@ -669,13 +979,13 @@ tbody td {
       body.card-view .panel {
         width: min(1240px, 100%);
         margin: 0 auto 18px;
-        padding: 14px;
-        background: rgba(12, 20, 32, 0.92);
-        backdrop-filter: blur(11px);
+        padding: 16px;
+        background: rgba(12, 20, 32, 0.86);
+        backdrop-filter: blur(12px);
+        border-radius: var(--r-lg);
       }
 
       body.card-view .panel label,
-      body.card-view .profileHint,
       body.card-view .modTitle {
         font-size: 11px;
       }
@@ -697,14 +1007,10 @@ tbody td {
         display: inline-block;
       }
 
-      body.card-view .tableShell {
-        display: none;
-      }
-
       body.card-view .cardView {
         min-height: calc(100vh - 150px);
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
         padding: 26px 0 46px;
         box-sizing: border-box;
@@ -714,18 +1020,23 @@ tbody td {
         background: rgba(88, 101, 242, 0.86);
       }
 
-      @media (max-width: 900px) {
+      @media (max-width: 1000px) {
         .cardGrid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns: 1fr;
+          gap: 26px;
         }
 
-        .gameCardImage {
-          height: 176px;
+        .colHeader {
+          position: static;
+        }
+
+        .colCards {
+          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
         }
       }
 
       @media (max-width: 560px) {
-        .cardGrid {
+        .colCards {
           grid-template-columns: 1fr;
         }
 
@@ -752,139 +1063,163 @@ tbody td {
         </a>
 
         <div class="headerActions">
-          <div class="status" id="status">connecting…</div>
           <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
-          <button id="openCardView" class="viewToggle" type="button">Card view</button>
           <button id="toggleFilters" class="filtersToggle" type="button">Filters</button>
         </div>
 
         <div class="counts">
-          <div>total: <span id="totalCount">0</span></div>
-          <div>shown: <span id="shownCount">0</span></div>
-          <div>serverTime: <span id="serverTime">—</span></div>
+          <div class="status is-connecting" id="status">Connecting…</div>
+          <div><span id="serverTime">—</span></div>
         </div>
 
-        <a class="discord-btn" href="https://discord.com/users/622431947339202561" target="_blank" rel="noreferrer" aria-label="Discord">
-          <img
-            class="discord-icon"
-            src="https://cdn.simpleicons.org/discord/white"
-            alt=""
-          />
-        </a>
+        <div class="discordGroup">
+          <a class="discord-btn" href="https://discord.com/users/622431947339202561" target="_blank" rel="noreferrer" aria-label="Kale on Discord">
+            <img class="discord-icon" src="https://cdn.simpleicons.org/discord/white" alt="" />
+            <span class="discord-name">Kale</span>
+          </a>
+          <a class="discord-btn" href="https://discord.com/users/422545450919526411" target="_blank" rel="noreferrer" aria-label="Wonder on Discord">
+            <img class="discord-icon" src="https://cdn.simpleicons.org/discord/white" alt="" />
+            <span class="discord-name">Wonder</span>
+          </a>
+        </div>
       </div>
     </header>
     
     <div class="wrap">
       <div class="panel">
-        <div class="row">
-          <div>
-            <label for="worker">Worker</label>
-            <select id="worker" hidden>
-              <option value="w0" selected>w0</option>
-              <option value="w1">w1</option>
-              <option value="w2">w2</option>
-              <option value="w3">w3</option>
-            </select>
-            <div class="csel" data-select="worker"></div>
-          </div>
-          <div>
-            <label for="hideEmpty">Hide empty</label>
-            <select id="hideEmpty" hidden>
-              <option value="no" selected>No</option>
-              <option value="yes">Yes</option>
-            </select>
-            <div class="csel" data-select="hideEmpty"></div>
-          </div>
-          <div>
-            <label for="type">Type</label>
-            <select id="type" hidden>
-              <option value="all" selected>All</option>
-              <option value="ffa">FFA</option>
-              <option value="team">Team</option>
-            </select>
-            <div class="csel" data-select="type"></div>
-          </div>
+        <div class="panelHead">
+          <div class="panelTitle">Filters</div>
+          <button id="reset" type="button" class="resetBtn">Reset all</button>
+        </div>
 
-          <div>
-            <label for="teamsFilter">Teams / Format</label>
-            <select id="teamsFilter" hidden>
-              <option value="any" selected>All</option>
-              <option value="format:Duos">Duos (2 per team)</option>
-              <option value="format:Trios">Trios (3 per team)</option>
-              <option value="format:Quads">Quads (4 per team)</option>
-              <option value="teams:2">2 teams</option>
-              <option value="teams:3">3 teams</option>
-              <option value="teams:4">4 teams</option>
-              <option value="teams:5">5 teams</option>
-              <option value="teams:6">6 teams</option>
-              <option value="teams:7">7 teams</option>
-              <option value="teams:8">8 teams</option>
-              <option value="format:HumansVsNations">Humans vs Nations</option>
-            </select>
-            <div class="csel" data-select="teamsFilter"></div>
-          </div>
+        <div class="filterGroup">
+          <div class="groupLabel">Lobby</div>
+          <div class="row">
+            <div>
+              <label for="type">Type</label>
+              <select id="type" hidden>
+                <option value="all" selected>All</option>
+                <option value="ffa">FFA</option>
+                <option value="team">Teams</option>
+                <option value="humansVsNations">Humans vs Nations</option>
+              </select>
+              <div class="csel" data-select="type"></div>
+            </div>
 
-          <div>
-            <label for="minJoined">Min joined (numClients)</label>
-            <input id="minJoined" type="number" placeholder="(any)" />
-          </div>
-          <div>
-            <label for="maxJoined">Max joined (numClients)</label>
-            <input id="maxJoined" type="number" placeholder="(any)" />
-          </div>
-          <div>
-            <label for="maxPlayersEq">maxPlayers equals</label>
-            <input id="maxPlayersEq" type="number" placeholder="(any)" />
-          </div>
-          <div>
-            <label for="minMaxPlayers">Min maxPlayers</label>
-            <input id="minMaxPlayers" type="number" placeholder="(any)" />
-          </div>
-          <div>
-            <label for="maxMaxPlayers">Max maxPlayers</label>
-            <input id="maxMaxPlayers" type="number" placeholder="(any)" />
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <button id="reset" type="button">Reset</button>
-          </div>
+            <div>
+              <label for="teamsFilter">Teams</label>
+              <select id="teamsFilter" hidden>
+                <option value="any" selected>All</option>
+                <option value="format:Duos">Duos (2 per team)</option>
+                <option value="format:Trios">Trios (3 per team)</option>
+                <option value="format:Quads">Quads (4 per team)</option>
+                <option value="teams:2">2 teams</option>
+                <option value="teams:3">3 teams</option>
+                <option value="teams:4">4 teams</option>
+                <option value="teams:5">5 teams</option>
+                <option value="teams:6">6 teams</option>
+                <option value="teams:7">7 teams</option>
+                <option value="teams:8">8 teams</option>
+              </select>
+              <div class="csel" data-select="teamsFilter"></div>
+            </div>
 
-          <div>
-            <label for="sort">Sort</label>
-            <select id="sort" hidden>
-              <option value="players_desc">Players ↓</option>
-              <option value="players_asc">Players ↑</option>
-              <option value="maxPlayers_desc">Max Players ↓</option>
-              <option value="maxPlayers_asc">Max Players ↑</option>
-              <option value="starts_asc" selected>Starts Soonest</option>
-              <option value="map_asc">Map A→Z</option>
-            </select>
-            <div class="csel" data-select="sort"></div>
+            <div>
+              <label for="hideEmpty">Hide empty</label>
+              <select id="hideEmpty" hidden>
+                <option value="no" selected>No</option>
+                <option value="yes">Yes</option>
+              </select>
+              <div class="csel" data-select="hideEmpty"></div>
+            </div>
+
+            <div>
+              <label for="sort">Sort by</label>
+              <select id="sort" hidden>
+                <option value="players_desc">Players ↓</option>
+                <option value="players_asc">Players ↑</option>
+                <option value="maxPlayers_desc">Max Players ↓</option>
+                <option value="maxPlayers_asc">Max Players ↑</option>
+                <option value="starts_asc" selected>Starts Soonest</option>
+                <option value="map_asc">Map A→Z</option>
+              </select>
+              <div class="csel" data-select="sort"></div>
+            </div>
+
+            <div>
+              <label for="worker">Server</label>
+              <select id="worker" hidden>
+                <option value="w0" selected>w0</option>
+                <option value="w1">w1</option>
+                <option value="w2">w2</option>
+                <option value="w3">w3</option>
+              </select>
+              <div class="csel" data-select="worker"></div>
+            </div>
           </div>
         </div>
 
-
-        <div class="profileRow">
-          <div>
-            <label for="profileName">Profile name</label>
-            <input id="profileName" type="text" placeholder="e.g. Big team games" />
-          </div>
-          <div>
-            <label for="profileSelect">Active profiles</label>
-            <select id="profileSelect" hidden multiple></select>
-            <div class="csel" data-select="profileSelect"></div>
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <button id="profileSave" type="button">Save</button>
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <button id="profileDelete" type="button">Delete</button>
+        <div class="filterGroup">
+          <div class="groupLabel">Players</div>
+          <div class="row">
+            <div>
+              <label for="minJoined">Min joined</label>
+              <input id="minJoined" type="number" placeholder="any" />
+            </div>
+            <div>
+              <label for="maxJoined">Max joined</label>
+              <input id="maxJoined" type="number" placeholder="any" />
+            </div>
+            <div>
+              <label for="maxPlayersEq">Capacity =</label>
+              <input id="maxPlayersEq" type="number" placeholder="any" />
+            </div>
+            <div>
+              <label for="minMaxPlayers">Min capacity</label>
+              <input id="minMaxPlayers" type="number" placeholder="any" />
+            </div>
+            <div>
+              <label for="maxMaxPlayers">Max capacity</label>
+              <input id="maxMaxPlayers" type="number" placeholder="any" />
+            </div>
+            <div>
+              <label for="minPerTeam">Min per team</label>
+              <input id="minPerTeam" type="number" placeholder="any" />
+            </div>
+            <div>
+              <label for="maxPerTeam">Max per team</label>
+              <input id="maxPerTeam" type="number" placeholder="any" />
+            </div>
           </div>
         </div>
 
-        <div class="modsRow" id="modFilters"></div>
+        <div class="filterGroup">
+          <div class="groupLabel">Profiles</div>
+          <div class="profileRow">
+            <div>
+              <label for="profileName">Profile name</label>
+              <input id="profileName" type="text" placeholder="e.g. Big team games" />
+            </div>
+            <div>
+              <label for="profileSelect">Active profiles</label>
+              <select id="profileSelect" hidden multiple></select>
+              <div class="csel" data-select="profileSelect"></div>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="profileSave" type="button">Save</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="profileDelete" type="button">Delete</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="filterGroup">
+          <div class="groupLabel">Modifiers</div>
+          <div class="modsRow" id="modFilters"></div>
+        </div>
       </div>
 
       <div id="cardView" class="cardView">
@@ -893,39 +1228,14 @@ tbody td {
         </div>
       </div>
 
-      <div id="tableView" class="tableShell" style="overflow:auto; border-radius:12px;">
-        <table>
-          <thead>
-            <tr>
-              <th>Join</th>
-              <th>Map / Mode</th>
-              <th>GameID</th>
-              <th>Type</th>
-              <th>Players</th>
-              <th>Starts</th>
-              <th>Shown modifiers (true only)</th>
-            </tr>
-          </thead>
-          <tbody id="rows">
-            <tr><td colspan="7" class="mono">waiting for data…</td></tr>
-          </tbody>
-        </table>
-      </div>
     </div>
 
     <script>
-      const CARD_VIEW_MODE = new URLSearchParams(window.location.search).get("view") === "cards";
-      const CARD_FILTER_STORAGE_KEY = "openfrontPendingCardViewFilters";
-      document.body.classList.toggle("card-view", CARD_VIEW_MODE);
+      document.body.classList.add("card-view");
 
-      const DEBUG = false;
-      const debugLog = (...args) => {
-        if (DEBUG) console.log(...args);
-      };
-      const debugError = (...args) => {
-        if (DEBUG) console.error(...args);
-      };
-      
+      // App-like feel: block native dragging of images/links/text everywhere.
+      document.addEventListener("dragstart", (e) => e.preventDefault());
+
       function getMapThumbnailUrl(mapName) {
         if (typeof mapName !== "string") mapName = "";
       
@@ -937,7 +1247,7 @@ tbody td {
         return `https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/maps/${slug}/thumbnail.webp`;
       }
       
-      const TRI = { ANY: "any", IN: "in", NEED: "need", OUT: "out" };
+      const TRI = { ANY: "any", YES: "yes", NO: "no" };
       const $ = (id) => document.getElementById(id);
       
       function escapeHtml(s) {
@@ -947,13 +1257,6 @@ tbody td {
           .replaceAll(">", "&gt;")
           .replaceAll('"', "&quot;")
           .replaceAll("'", "&#039;");
-      }
-      
-      function titleCaseWords(s) {
-        return String(s)
-          .trim()
-          .toLowerCase()
-          .replace(/\b\w/g, (c) => c.toUpperCase());
       }
       
       function buildCustomSelect(selectEl, host) {
@@ -1180,9 +1483,6 @@ tbody td {
             addSep();
             addGroup("Teams (Exact Count)");
             for (const value of ["teams:2", "teams:3", "teams:4", "teams:5", "teams:6", "teams:7", "teams:8"]) addOption(byValue(value));
-            addSep();
-            addGroup("Special");
-            addOption(byValue("format:HumansVsNations"));
             syncSelectedUI();
             return;
           }
@@ -1259,6 +1559,8 @@ tbody td {
         maxPlayersEq: $("maxPlayersEq"),
         minMaxPlayers: $("minMaxPlayers"),
         maxMaxPlayers: $("maxMaxPlayers"),
+        minPerTeam: $("minPerTeam"),
+        maxPerTeam: $("maxPerTeam"),
 
         profileName: $("profileName"),
         profileSelect: $("profileSelect"),
@@ -1266,15 +1568,9 @@ tbody td {
         profileDelete: $("profileDelete"),
       
         modFilters: $("modFilters"),
-        totalCount: $("totalCount"),
-        shownCount: $("shownCount"),
         serverTime: $("serverTime"),
-        rows: $("rows"),
         cardGrid: $("cardGrid"),
-        tableView: $("tableView"),
-        cardView: $("cardView"),
         alertToggle: $("alertToggle"),
-        openCardView: $("openCardView"),
         toggleFilters: $("toggleFilters"),
       };
       
@@ -1298,10 +1594,11 @@ tbody td {
         originalTitle: document.title,
         audioCtx: null,
         renderScheduled: false,
-        lastRowsHtml: "",
         lastCardsHtml: "",
-        clickedLinks: new Map(),
-      
+        lastStructSig: "",
+        pendingCardsHtml: null,
+        cardsHoverHold: false,
+
         reconnectTimer: null,
         staleTimer: null,
         lastMessageAt: 0,
@@ -1394,6 +1691,8 @@ tbody td {
           maxPlayersEq: filters.maxPlayersEq,
           minMaxPlayers: filters.minMaxPlayers,
           maxMaxPlayers: filters.maxMaxPlayers,
+          minPerTeam: filters.minPerTeam,
+          maxPerTeam: filters.maxPerTeam,
           tri: Array.from(state.tri.entries()),
         };
       }
@@ -1411,6 +1710,8 @@ tbody td {
           maxPlayersEq: value.maxPlayersEq ?? null,
           minMaxPlayers: value.minMaxPlayers ?? null,
           maxMaxPlayers: value.maxMaxPlayers ?? null,
+          minPerTeam: value.minPerTeam ?? null,
+          maxPerTeam: value.maxPerTeam ?? null,
           tri: Array.isArray(value.tri) ? value.tri : [],
         };
       }
@@ -1452,10 +1753,12 @@ tbody td {
           setInputNum(els.maxPlayersEq, filters.maxPlayersEq);
           setInputNum(els.minMaxPlayers, filters.minMaxPlayers);
           setInputNum(els.maxMaxPlayers, filters.maxMaxPlayers);
+          setInputNum(els.minPerTeam, filters.minPerTeam);
+          setInputNum(els.maxPerTeam, filters.maxPerTeam);
 
           initTriState();
           for (const [id, value] of filters.tri) {
-            if ([TRI.ANY, TRI.IN, TRI.NEED, TRI.OUT].includes(value)) state.tri.set(id, value);
+            if ([TRI.ANY, TRI.YES, TRI.NO].includes(value)) state.tri.set(id, value);
           }
           renderModFiltersUI();
 
@@ -1469,6 +1772,8 @@ tbody td {
             els.maxPlayersEq,
             els.minMaxPlayers,
             els.maxMaxPlayers,
+            els.minPerTeam,
+            els.maxPerTeam,
           ].forEach(dispatchChange);
 
           if (workerChanged) dispatchChange(els.worker);
@@ -1528,7 +1833,7 @@ tbody td {
       }
 
       const boolFilters = [
-        { id: "isCompact", label: "Compact", get: (g) => getPmTrue(g, "isCompact") },
+        { id: "isCompact", label: "Compact Map", get: (g) => getPmTrue(g, "isCompact") },
         { id: "isCrowded", label: "Crowded", get: (g) => getPmTrue(g, "isCrowded") },
         { id: "randomSpawn", label: "Random Spawn", get: (g) => getAnyTrue(g, [["pm", "isRandomSpawn"], ["cfg", "randomSpawn"]]) },
         { id: "isAlliancesDisabled", label: "Alliances Disabled", get: (g) => getPmTrue(g, "isAlliancesDisabled") },
@@ -1541,10 +1846,10 @@ tbody td {
       ];
       
       const numExact = [
-        { id: "goldMultiplier_eq_2", label: "Gold Multiplier=2", key: "goldMultiplier", exact: 2 },
-        { id: "startingGold_eq_1000000", label: "Starting Gold=1,000,000", key: "startingGold", exact: 1000000 },
-        { id: "startingGold_eq_5000000", label: "Starting Gold=5,000,000", key: "startingGold", exact: 5000000 },
-        { id: "startingGold_eq_25000000", label: "Starting Gold=25,000,000", key: "startingGold", exact: 25000000 },
+        { id: "goldMultiplier_eq_2", label: "2× Gold", key: "goldMultiplier", exact: 2 },
+        { id: "startingGold_eq_1000000", label: "1M Starting Gold", key: "startingGold", exact: 1000000 },
+        { id: "startingGold_eq_5000000", label: "5M Starting Gold", key: "startingGold", exact: 5000000 },
+        { id: "startingGold_eq_25000000", label: "25M Starting Gold", key: "startingGold", exact: 25000000 },
       ];
       
       function parseNum(v) {
@@ -1558,82 +1863,32 @@ tbody td {
         return `https://openfront.io/game/${encodeURIComponent(gameID)}`;
       }
       
-      async function copyText(text) {
-        if (!text || text === "about:blank") return false;
-      
-        if (navigator.clipboard && window.isSecureContext) {
-          await navigator.clipboard.writeText(text);
-          return true;
-        }
-      
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.setAttribute("readonly", "");
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-      
-        try {
-          return document.execCommand("copy");
-        } finally {
-          ta.remove();
-        }
-      }
-      
-      function markActionClicked(actionLink) {
-        const key = actionLink.dataset.actionKey;
-        const until = Date.now() + 850;
-      
-        state.clickedLinks.set(key, until);
-        actionLink.classList.add("clicked");
-      
-        setTimeout(() => {
-          if (state.clickedLinks.get(key) !== until) return;
-          state.clickedLinks.delete(key);
-          actionLink.classList.remove("clicked");
-          scheduleRender();
-        }, 850);
-      }
-      
-      function isActionClicked(key) {
-        const until = state.clickedLinks.get(key);
-        if (!until) return false;
-        if (until <= Date.now()) {
-          state.clickedLinks.delete(key);
-          return false;
-        }
-        return true;
-      }
-      
       function wireActionLinks() {
-        const handleActionClick = (e) => {
-          const actionLink = e.target.closest("a[data-action-key]");
-          if (actionLink) {
-            markActionClicked(actionLink);
-      
-            if (actionLink.dataset.copyUrl) {
-              e.preventDefault();
-              copyText(actionLink.dataset.copyUrl).catch(() => {});
-            }
-            return;
-          }
-
+        // The whole card is the join button.
+        const openCard = (e) => {
           const card = e.target.closest(".gameCard[data-join-url]");
           if (!card) return;
           window.open(card.dataset.joinUrl, "_blank", "noopener,noreferrer");
         };
 
-        els.rows.addEventListener("click", handleActionClick);
-        els.cardGrid.addEventListener("click", handleActionClick);
+        els.cardGrid.addEventListener("click", openCard);
         els.cardGrid.addEventListener("keydown", (e) => {
           if (e.key !== "Enter" && e.key !== " ") return;
-          if (e.target.closest("a, button")) return;
-          const card = e.target.closest(".gameCard[data-join-url]");
-          if (!card) return;
+          if (!e.target.closest(".gameCard[data-join-url]")) return;
           e.preventDefault();
-          window.open(card.dataset.joinUrl, "_blank", "noopener,noreferrer");
+          openCard(e);
         });
+
+        const canHover = !window.matchMedia || window.matchMedia("(hover: hover)").matches;
+        if (canHover) {
+          els.cardGrid.addEventListener("pointerenter", () => {
+            state.cardsHoverHold = true;
+          });
+          els.cardGrid.addEventListener("pointerleave", () => {
+            state.cardsHoverHold = false;
+            flushPendingCards();
+          });
+        }
       }
       
       function getCfg(g) { return g?.cfg || g?.gameConfig || null; }
@@ -1664,42 +1919,6 @@ tbody td {
         return null;
       }
       
-      function getFirstNumber(...values) {
-        for (const v of values) {
-          if (typeof v === "number" && Number.isFinite(v)) return v;
-        }
-        return null;
-      }
-      
-      function getNationsAmount(g) {
-        const cfg = g?.gameConfig || {};
-        const pm = cfg?.publicGameModifiers || {};
-      
-        return getFirstNumber(
-          pm.numNations,
-          pm.nations,
-          pm.nationCount,
-          cfg.numNations,
-          cfg.nations,
-          cfg.nationCount,
-          cfg.maxNations
-        );
-      }
-      
-      function triMatchBool(value, tri) {
-        if (tri === TRI.ANY) return true;
-        if (tri === TRI.IN) return value === true;
-        if (tri === TRI.OUT) return value !== true;
-        return true;
-      }
-      
-      function triMatchNumExact(num, tri, exact) {
-        if (tri === TRI.ANY) return true;
-        if (tri === TRI.IN) return num === exact;
-        if (tri === TRI.OUT) return num !== exact;
-        return true;
-      }
-      
       function initTriState() {
         state.tri.clear();
         for (const f of boolFilters) state.tri.set(f.id, TRI.ANY);
@@ -1717,64 +1936,39 @@ tbody td {
       }
       
       function triButtonGroup(id) {
-  const cur = state.tri.get(id) || TRI.ANY;
-  const mkBtn = (val, text) =>
-    `<button type="button" class="triBtn ${cur === val ? "active" : ""}" data-tri="${escapeHtml(id)}" data-val="${escapeHtml(val)}">${escapeHtml(text)}</button>`;
+        const cur = state.tri.get(id) || TRI.ANY;
+        const mkBtn = (val, text) =>
+          `<button type="button" class="triBtn ${cur === val ? "active" : ""}" data-tri="${escapeHtml(id)}" data-val="${escapeHtml(val)}">${escapeHtml(text)}</button>`;
 
-  return `<div class="triBtns">
-    ${mkBtn(TRI.ANY, "ANY")}
-    ${mkBtn(TRI.IN, "IN")}
-    ${mkBtn(TRI.NEED, "NEED")}
-    ${mkBtn(TRI.OUT, "OUT")}
-  </div>`;
-}
-function matchModifierFilters(g, triState = state.tri) {
-  let hasNeed = false;
-  let allNeedMatched = true;
+        return `<div class="triBtns">
+          ${mkBtn(TRI.ANY, "Any")}
+          ${mkBtn(TRI.YES, "Yes")}
+          ${mkBtn(TRI.NO, "No")}
+        </div>`;
+      }
 
-  let hasIn = false;
-  let anyInMatched = false;
+      // Yes = the lobby must have the modifier (all "Yes" modifiers required).
+      // No  = exclude any lobby that has the modifier. Any = ignore.
+      function matchModifierFilters(g, triState = state.tri) {
+        const entries = [
+          ...boolFilters.map((bf) => [bf.id, bf.get(g.raw) === true]),
+          ...numExact.map((nf) => [nf.id, getNumber(g.raw, nf.key) === nf.exact]),
+        ];
 
-  for (const bf of boolFilters) {
-    const tri = triState.get(bf.id) || TRI.ANY;
-    const matched = bf.get(g.raw) === true;
+        let hasYes = false;
+        let allYesMatched = true;
 
-    if (tri === TRI.OUT && matched) return false;
+        for (const [id, matched] of entries) {
+          const tri = triState.get(id) || TRI.ANY;
+          if (tri === TRI.NO && matched) return false;
+          if (tri === TRI.YES) {
+            hasYes = true;
+            if (!matched) allYesMatched = false;
+          }
+        }
 
-    if (tri === TRI.NEED) {
-      hasNeed = true;
-      if (!matched) allNeedMatched = false;
-    }
-
-    if (tri === TRI.IN) {
-      hasIn = true;
-      if (matched) anyInMatched = true;
-    }
-  }
-
-  for (const nf of numExact) {
-    const tri = triState.get(nf.id) || TRI.ANY;
-    const matched = getNumber(g.raw, nf.key) === nf.exact;
-
-    if (tri === TRI.OUT && matched) return false;
-
-    if (tri === TRI.NEED) {
-      hasNeed = true;
-      if (!matched) allNeedMatched = false;
-    }
-
-    if (tri === TRI.IN) {
-      hasIn = true;
-      if (matched) anyInMatched = true;
-    }
-  }
-
-  if (hasNeed) return allNeedMatched;
-
-  if (hasIn) return anyInMatched;
-
-  return true;
-}
+        return hasYes ? allYesMatched : true;
+      }
       function renderModFiltersUI() {
         const first = new Set(["isCompact", "isCrowded", "randomSpawn"]);
         const blocks = [];
@@ -1821,11 +2015,13 @@ function matchModifierFilters(g, triState = state.tri) {
           map: String(cfg.gameMap ?? "—"),
           joined,
           maxPlayers,
-          availableSlots: maxPlayers !== null ? maxPlayers - joined : null,
-          fullness: maxPlayers && maxPlayers > 0 ? joined / maxPlayers : null,
           kind,
           teamCount,
-          playersPerTeam: typeof teamCount === "number" && maxPlayers !== null && teamCount > 0 ? maxPlayers / teamCount : null,
+          playersPerTeam:
+            format === "Duos" ? 2 :
+            format === "Trios" ? 3 :
+            format === "Quads" ? 4 :
+            (typeof teamCount === "number" && maxPlayers !== null && teamCount > 0 ? maxPlayers / teamCount : null),
           format,
           startsAt: g?.startsAt ?? null,
         };
@@ -1834,7 +2030,13 @@ function matchModifierFilters(g, triState = state.tri) {
       function getLobbyKind(g) {
         return g?.kind || "ffa";
       }
-      
+
+      // The "Type" filter treats Humans vs Nations as its own type, separate
+      // from plain Teams (matches the FFA / Teams / Humans vs Nations choices).
+      function getLobbyType(g) {
+        return g?.format === "HumansVsNations" ? "humansVsNations" : getLobbyKind(g);
+      }
+
       function flattenGames(payload) {
         const out = [];
         const gamesByType = payload?.games || {};
@@ -1856,6 +2058,8 @@ function matchModifierFilters(g, triState = state.tri) {
           maxPlayersEq: parseNum(els.maxPlayersEq.value),
           minMaxPlayers: parseNum(els.minMaxPlayers.value),
           maxMaxPlayers: parseNum(els.maxMaxPlayers.value),
+          minPerTeam: parseNum(els.minPerTeam.value),
+          maxPerTeam: parseNum(els.maxPerTeam.value),
         };
       }
       
@@ -1875,6 +2079,8 @@ function matchModifierFilters(g, triState = state.tri) {
           maxPlayersEq: f.maxPlayersEq,
           minMaxPlayers: f.minMaxPlayers,
           maxMaxPlayers: f.maxMaxPlayers,
+          minPerTeam: f.minPerTeam,
+          maxPerTeam: f.maxPerTeam,
           tri: triState,
         });
       }
@@ -2026,16 +2232,28 @@ function matchModifierFilters(g, triState = state.tri) {
         }
       }
       
-      function setRowsHtml(html) {
-        if (state.lastRowsHtml === html) return;
-        els.rows.innerHTML = html;
-        state.lastRowsHtml = html;
-      }
-
       function setCardsHtml(html) {
-        if (state.lastCardsHtml === html) return;
+        if (html === state.lastCardsHtml) return;
+
+        // While the pointer is over the grid, don't rebuild it: replacing
+        // innerHTML destroys the hovered card (its hover style animates in
+        // again each time = flicker) and can reorder cards out from under the
+        // cursor. Stash the latest markup and apply it once the pointer leaves.
+        if (state.cardsHoverHold) {
+          state.pendingCardsHtml = html;
+          return;
+        }
+
         els.cardGrid.innerHTML = html;
         state.lastCardsHtml = html;
+        state.pendingCardsHtml = null;
+      }
+
+      function flushPendingCards() {
+        if (state.pendingCardsHtml === null) return;
+        const html = state.pendingCardsHtml;
+        state.pendingCardsHtml = null;
+        setCardsHtml(html);
       }
       
       function scheduleRender() {
@@ -2121,12 +2339,19 @@ function matchModifierFilters(g, triState = state.tri) {
           if (maxPlayers === null) return false;
           if (maxPlayers > f.maxMaxPlayers) return false;
         }
-      
+
+        if (f.minPerTeam !== null || f.maxPerTeam !== null) {
+          const perTeam = g.playersPerTeam;
+          if (perTeam === null || perTeam === undefined) return false;
+          if (f.minPerTeam !== null && perTeam < f.minPerTeam) return false;
+          if (f.maxPerTeam !== null && perTeam > f.maxPerTeam) return false;
+        }
+
         return true;
       }
       
       function matchAllFilters(g, f, triState = state.tri) {
-        if (f.type !== "all" && getLobbyKind(g) !== f.type) return false;
+        if (f.type !== "all" && getLobbyType(g) !== f.type) return false;
         if (f.hideEmpty && (g.joined ?? 0) === 0) return false;
 
         if (!matchTeamsFilter(g, f.teamFilters)) return false;
@@ -2172,14 +2397,6 @@ function matchModifierFilters(g, triState = state.tri) {
         return `${h}h ${mm}m`;
       }
       
-      function formatStarts(g, serverTime) {
-        if (!g.startsAt) return "—";
-        if (!serverTime) return String(g.startsAt);
-        const deltaS = Math.round((g.startsAt - serverTime) / 1000);
-        if (deltaS > 0) return `in ${formatDuration(deltaS)}`;
-        return "started";
-      }
-      
       function formatTeamCountLabel(teamCount, maxPlayers) {
         if (typeof teamCount !== "number" || !Number.isFinite(teamCount) || teamCount <= 1) return "Team";
       
@@ -2210,84 +2427,38 @@ function matchModifierFilters(g, triState = state.tri) {
         return typeLabelShort(g);
       }
       
-      function trueOnlyTagsHtml(g) {
-        const tags = [];
-        const push = (s) => tags.push(titleCaseWords(s));
-      
-        if (g.pm?.isCompact === true) push("compact");
-        if (g.pm?.isCrowded === true) push("crowded");
-        if (g.pm?.isAlliancesDisabled === true) push("alliances disabled");
-        if (g.pm?.isNukesDisabled === true) push("nukes disabled");
-        if (g.pm?.isPortsDisabled === true) push("ports disabled");
-        if (g.pm?.isSAMsDisabled === true) push("sams disabled");
-        if (g.pm?.isPeaceTime === true) push("peace time");
-        if (g.pm?.isHardNations === true) push("hard nations");
-      
-        if (g.pm?.isRandomSpawn === true || g.cfg?.randomSpawn === true) push("random spawn");
-        if (g.pm?.isWaterNukes === true || g.cfg?.waterNukes === true) push("water nukes");
-      
-        if (g.raw?.gameConfig?.playerTeams !== undefined && g.raw?.gameConfig?.playerTeams !== null) {
-          tags.push(`PlayerTeams=${titleCaseWords(String(g.raw.gameConfig.playerTeams))}`);
-        }
-      
-        const sg = getNumber(g.raw, "startingGold");
-        if (Number.isFinite(sg)) tags.push(`StartingGold=${sg}`);
-      
-        const gm = getNumber(g.raw, "goldMultiplier");
-        if (Number.isFinite(gm)) tags.push(`GoldMultiplier=${gm}`);
-      
-        const nations = getNationsAmount(g.raw);
-        if (nations !== null) tags.push(`Nations=${nations}`);
-      
-        if (tags.length === 0) return "";
-        return `<div class="tags">${tags.map((t) => `<span class="tag mono">${escapeHtml(t)}</span>`).join("")}</div>`;
+      // All active modifiers for a game as pretty labels. Labels mirror OpenFront's
+      // own getActiveModifiers() (src/client/Utils.ts) so they match the in-game
+      // lobby badges. Each flag is read from publicGameModifiers, with a fallback to
+      // the raw gameConfig (map size, disabledUnits, top-level waterNukes) so a tag
+      // still shows however the lobby encodes it. Team format is omitted (the mode
+      // line already conveys it).
+      function gameModifierLabels(g) {
+        const pm = g.pm || {};
+        const cfg = g.cfg || {};
+        const disabled = Array.isArray(cfg.disabledUnits) ? cfg.disabledUnits : [];
+        const labels = [];
+
+        const startingGold = getNumber(g.raw, "startingGold");
+        if (Number.isFinite(startingGold) && startingGold > 0) labels.push(`${compactNumber(startingGold)} Starting Gold`);
+
+        const goldMultiplier = getNumber(g.raw, "goldMultiplier");
+        if (Number.isFinite(goldMultiplier) && goldMultiplier !== 1) labels.push(`${goldMultiplier}× Gold`);
+
+        if (pm.isRandomSpawn === true || cfg.randomSpawn === true) labels.push("Random Spawn");
+        if (pm.isCompact === true || cfg.gameMapSize === "Compact") labels.push("Compact Map");
+        if (pm.isCrowded === true) labels.push("Crowded");
+        if (pm.isHardNations === true) labels.push("Hard Nations");
+        if (pm.isAlliancesDisabled === true || cfg.disableAlliances === true) labels.push("Alliances Disabled");
+        if (pm.isPortsDisabled === true || disabled.includes("Port")) labels.push("Ports Disabled");
+        if (pm.isNukesDisabled === true || disabled.includes("Atom Bomb")) labels.push("Nukes Disabled");
+        if (pm.isSAMsDisabled === true) labels.push("SAMs Disabled");
+        if (pm.isPeaceTime === true) labels.push("4min Peace");
+        if (pm.isWaterNukes === true || cfg.waterNukes === true) labels.push("Water Nukes");
+
+        return labels;
       }
-      
-      function rowHtml(g, serverTime) {
-        const gameID = g.id || "";
-        const joinUrl = getJoinUrl(gameID);
-        const maxPlayers = g.maxPlayers;
-        const map = String(g.map ?? "—");
-        const thumbUrl = getMapThumbnailUrl(map);
-        const isNewMatchFlash = state.flashIds.has(String(gameID));
-        const joinKey = `join:${gameID}`;
-        const copyKey = `copy:${gameID}`;
-        const joinClicked = isActionClicked(joinKey);
-        const copyClicked = isActionClicked(copyKey);
-      
-        return `
-          <tr class="${isNewMatchFlash ? "newMatchFlash" : ""}">
-            <td class="join">
-              <div class="joinActions">
-                <a class="actionLink joinLink ${joinClicked ? "clicked" : ""}" href="${joinUrl}" target="_blank" rel="noreferrer" data-action-key="${escapeHtml(joinKey)}">Join</a>
-                <a class="actionLink copyLink ${copyClicked ? "clicked" : ""}" href="#" data-action-key="${escapeHtml(copyKey)}" data-copy-url="${escapeHtml(joinUrl)}" title="Copy game link">Copy</a>
-              </div>
-            </td>
-      
-            <td>
-              <div style="display:flex; align-items:center; gap:10px">
-                <img src="${thumbUrl}" alt="Map" loading="lazy" decoding="async" style="width:150px;height:90px;object-fit:cover;flex:0 0 auto;border-radius:10px;box-shadow:0 0 0 1.5px rgba(0,0,0,0.24)" onerror="this.onerror=null;this.src='https://via.placeholder.com/120x72?text=No+map';">
-                <div>
-                  <b>${escapeHtml(map)}</b>
-                  <div class="status">${escapeHtml(modeSummaryLine(g))}</div>
-                </div>
-              </div>
-            </td>
-      
-            <td class="mono">${escapeHtml(gameID)}</td>
-            <td class="mono">${escapeHtml(getLobbyKind(g).toUpperCase())}</td>
-            <td class="mono">${escapeHtml(String(g.joined ?? 0))}${maxPlayers !== null ? "/" + escapeHtml(String(maxPlayers)) : ""}</td>
-      
-            <td>
-              <div>${escapeHtml(formatStarts(g, serverTime))}</div>
-              <div class="status mono">${g.startsAt ? escapeHtml(String(g.startsAt)) : ""}</div>
-            </td>
-      
-            <td>${trueOnlyTagsHtml(g)}</td>
-          </tr>
-        `;
-      }
-      
+
       function compactNumber(value) {
         if (!Number.isFinite(value)) return null;
         if (Math.abs(value) >= 1000000) {
@@ -2301,23 +2472,27 @@ function matchModifierFilters(g, triState = state.tri) {
         return String(value);
       }
 
+      // Measure a badge label's rendered width (uppercase, as drawn) so the stack
+      // sorts by real pixel width, not character count — a "×" is far narrower than
+      // a letter, so length-based sorting got the order wrong.
+      let _badgeCtx = null;
+      function badgeTextWidth(text) {
+        if (!_badgeCtx) {
+          _badgeCtx = document.createElement("canvas").getContext("2d");
+          const font = getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim();
+          _badgeCtx.font = "900 11px " + (font || "sans-serif");
+        }
+        return _badgeCtx.measureText(text.toUpperCase()).width;
+      }
+
+      // All modifier tags, widest label first, stacked vertically over the image.
       function cardBadgeLabels(g) {
-        const labels = [];
-        const startingGold = getNumber(g.raw, "startingGold");
-        const goldMultiplier = getNumber(g.raw, "goldMultiplier");
-
-        if (Number.isFinite(startingGold)) labels.push(`${compactNumber(startingGold)} Starting Gold`);
-        if (Number.isFinite(goldMultiplier) && goldMultiplier !== 1) labels.push(`${goldMultiplier}× Gold`);
-        if (g.pm?.isCompact === true) labels.push("Compact");
-        if (g.pm?.isCrowded === true) labels.push("Crowded");
-        if (g.pm?.isRandomSpawn === true || g.cfg?.randomSpawn === true) labels.push("Random Spawn");
-        if (g.pm?.isHardNations === true) labels.push("Hard Nations");
-
-        return labels.slice(0, 2);
+        return gameModifierLabels(g).sort((a, b) => badgeTextWidth(b) - badgeTextWidth(a));
       }
 
       function formatCardStarts(g, serverTime) {
-        if (!g.startsAt || !serverTime) return "—";
+        if (!g.startsAt) return "Open";
+        if (!serverTime) return "—";
         const deltaS = Math.round((g.startsAt - serverTime) / 1000);
         return deltaS > 0 ? formatDuration(deltaS) : "Started";
       }
@@ -2329,10 +2504,6 @@ function matchModifierFilters(g, triState = state.tri) {
         const thumbUrl = getMapThumbnailUrl(map);
         const maxPlayers = g.maxPlayers;
         const isNewMatchFlash = state.flashIds.has(String(gameID));
-        const joinKey = `join:${gameID}`;
-        const copyKey = `copy:${gameID}`;
-        const joinClicked = isActionClicked(joinKey);
-        const copyClicked = isActionClicked(copyKey);
         const badges = cardBadgeLabels(g)
           .map((label) => `<span class="cardBadge">${escapeHtml(label)}</span>`)
           .join("");
@@ -2342,9 +2513,8 @@ function matchModifierFilters(g, triState = state.tri) {
             class="gameCard ${isNewMatchFlash ? "newMatchFlash" : ""}"
             tabindex="0"
             role="link"
-            aria-label="Join ${escapeHtml(map)}"
+            data-game-id="${escapeHtml(gameID)}"
             data-join-url="${escapeHtml(joinUrl)}"
-            title="${escapeHtml(gameID)}"
           >
             <div class="gameCardImage">
               <img
@@ -2359,69 +2529,128 @@ function matchModifierFilters(g, triState = state.tri) {
               <div class="cardPlayers">${escapeHtml(String(g.joined ?? 0))}${maxPlayers !== null ? "/" + escapeHtml(String(maxPlayers)) : ""} 👥</div>
             </div>
             <div class="gameCardInfo">
-              <div class="gameCardText">
-                <div class="gameCardTitle">${escapeHtml(map)}</div>
-                <div class="gameCardMode">${escapeHtml(modeSummaryLine(g))}</div>
-              </div>
-              <div class="cardActions">
-                <a class="actionLink joinLink ${joinClicked ? "clicked" : ""}" href="${joinUrl}" target="_blank" rel="noreferrer" data-action-key="${escapeHtml(joinKey)}">Join</a>
-                <a class="actionLink copyLink ${copyClicked ? "clicked" : ""}" href="#" data-action-key="${escapeHtml(copyKey)}" data-copy-url="${escapeHtml(joinUrl)}" title="Copy game link">Copy</a>
+              <div class="gameCardTop">
+                <div class="gameCardText">
+                  <div class="gameCardTitle">${escapeHtml(map)}</div>
+                  <div class="gameCardMode">${escapeHtml(modeSummaryLine(g))}</div>
+                </div>
+                <div class="cardCode mono">${escapeHtml(gameID)}</div>
               </div>
             </div>
           </article>
         `;
       }
 
+      const CARD_COLUMNS = [
+        { key: "ffa", label: "Free For All" },
+        { key: "team", label: "Teams" },
+        { key: "special", label: "Special" },
+      ];
+
+      // Minimum slots shown per column (active game + the next one). Real games
+      // fill these; any remaining slot shows a "Spawning game…" placeholder.
+      const COLUMN_MIN_SLOTS = 2;
+
+      function spawnPlaceholderHtml() {
+        return `<div class="colEmpty"><span class="spawnDot"></span>Spawning game…</div>`;
+      }
+
+      function columnHtml(col, games, serverTime) {
+        // Every game in the feed is a real card — including the next, not-yet-full
+        // lobby (0 players, no countdown). Placeholders only fill empty slots.
+        const slots = games.map((g) => {
+          try {
+            return cardHtml(g, serverTime);
+          } catch (e) {
+            return `<div class="cardEmpty mono" style="color:#ff8f8f">Error: ${escapeHtml(e.message)}</div>`;
+          }
+        });
+
+        for (let i = slots.length; i < COLUMN_MIN_SLOTS; i++) slots.push(spawnPlaceholderHtml());
+
+        return `
+          <section class="cardColumn" data-cat="${col.key}">
+            <div class="colHeader">${escapeHtml(col.label)}<span class="colCount mono">${games.length}</span></div>
+            <div class="colCards">${slots.join("")}</div>
+          </section>
+        `;
+      }
+
+      // Identifies the *structure*: which game IDs are in which column, plus the
+      // chosen sort. Player counts / countdowns changing does NOT change this, so
+      // a number-only tick patches in place; adding/removing a game rebuilds.
+      function structSignature(buckets, sort) {
+        const ids = (arr) => arr.map((g) => String(g.id || "")).sort().join(",");
+        return [sort, ids(buckets.ffa), ids(buckets.team), ids(buckets.special)].join("|");
+      }
+
+      // Patch only the volatile bits (countdown + player count) on cards already
+      // in the DOM. No rebuild → the hovered card survives (no flash) and nothing
+      // reorders. Runs every tick, even while a structural redraw is held.
+      function updateLiveFields(games, serverTime) {
+        const byId = new Map();
+        for (const g of games) byId.set(String(g.id || ""), g);
+
+        els.cardGrid.querySelectorAll(".gameCard[data-game-id]").forEach((card) => {
+          const g = byId.get(card.dataset.gameId);
+          if (!g) return;
+
+          const timeEl = card.querySelector(".cardTime");
+          if (timeEl) timeEl.textContent = formatCardStarts(g, serverTime);
+
+          const playersEl = card.querySelector(".cardPlayers");
+          if (playersEl) {
+            const max = g.maxPlayers;
+            playersEl.textContent = `${g.joined ?? 0}${max !== null ? "/" + max : ""} 👥`;
+          }
+        });
+      }
+
       function render() {
         if (!state.payload) return;
-      
+
         cleanupFlashIds();
-      
+
         const serverTime = state.payload.serverTime;
         const games = flattenGames(state.payload);
-      
-        els.serverTime.textContent = String(serverTime ?? "—");
-        els.totalCount.textContent = String(games.length);
-      
+
+        els.serverTime.textContent = serverTime ? new Date(serverTime).toLocaleTimeString() : "—";
+
         const f = getFiltersFromUI();
         const filtered = games.filter((g) => matchesCurrentFilters(g, f));
         const sorted = sortGames(filtered, f.sort);
-      
+
         handleNewMatchingGames(sorted, f);
-      
-        els.shownCount.textContent = String(sorted.length);
-      
-        if (sorted.length === 0) {
-          setRowsHtml(`<tr><td colspan="7" class="mono">no matches</td></tr>`);
-          setCardsHtml(`<div class="cardEmpty mono">no matches</div>`);
+
+        // The socket already groups lobbies into ffa / team / special — keep each
+        // game in the column the server assigned it to.
+        const buckets = { ffa: [], team: [], special: [] };
+        for (const g of sorted) {
+          const cat = g.raw?.__rawType || g.raw?.publicGameType;
+          if (buckets[cat]) buckets[cat].push(g);
+        }
+
+        // Same cards as last time? Just tick the timers/counts — no rebuild,
+        // no flash, no movement. Only add/remove/sort/filter rebuilds the grid.
+        const sig = structSignature(buckets, f.sort);
+        const alreadyBuilt = !!els.cardGrid.querySelector(".cardColumn");
+
+        if (sig === state.lastStructSig && alreadyBuilt) {
+          updateLiveFields(sorted, serverTime);
           return;
         }
 
-        if (CARD_VIEW_MODE) {
-          const cardsHtml = sorted.map((g, idx) => {
-            try {
-              return cardHtml(g, serverTime);
-            } catch (e) {
-              debugError("Error rendering card", idx, g, e);
-              return `<div class="cardEmpty mono" style="color:#ff8f8f">Error: ${escapeHtml(e.message)}</div>`;
-            }
-          }).join("");
-          setCardsHtml(cardsHtml);
-          return;
-        }
-      
-        const rowsHtml = sorted.map((g, idx) => {
-          try {
-            return rowHtml(g, serverTime);
-          } catch (e) {
-            debugError("Error rendering row", idx, g, e);
-            return `<tr><td colspan="7" class="mono" style="color:red">Error: ${escapeHtml(e.message)}</td></tr>`;
-          }
-        }).join("");
-      
-        setRowsHtml(rowsHtml);
+        state.lastStructSig = sig;
+        setCardsHtml(CARD_COLUMNS.map((col) => columnHtml(col, buckets[col.key], serverTime)).join(""));
+        updateLiveFields(sorted, serverTime);
       }
       
+      function setStatus(text, stateClass) {
+        els.status.textContent = text;
+        els.status.classList.remove("is-live", "is-connecting", "is-offline");
+        if (stateClass) els.status.classList.add(stateClass);
+      }
+
       function clearReconnectTimers() {
         if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
         if (state.staleTimer) clearInterval(state.staleTimer);
@@ -2429,7 +2658,7 @@ function matchModifierFilters(g, triState = state.tri) {
         state.staleTimer = null;
       }
       
-      function scheduleReconnect(reason = "reconnect") {
+      function scheduleReconnect() {
         if (state.manualDisconnect) return;
         if (state.reconnectTimer) return;
       
@@ -2437,7 +2666,7 @@ function matchModifierFilters(g, triState = state.tri) {
         const delay = Math.min(30000, 1500 * Math.pow(1.8, attempts));
       
         state.reconnectAttempts += 1;
-        els.status.textContent = `${reason} — reconnecting in ${Math.round(delay / 1000)}s …`;
+        setStatus(`Reconnecting in ${Math.round(delay / 1000)}s…`, "is-connecting");
       
         state.reconnectTimer = setTimeout(() => {
           state.reconnectTimer = null;
@@ -2456,7 +2685,7 @@ function matchModifierFilters(g, triState = state.tri) {
       
           if (state.lastMessageAt && age > staleAfter) {
             try { state.ws.close(); } catch {}
-            scheduleReconnect("stale connection");
+            scheduleReconnect();
           }
         }, 10000);
       }
@@ -2473,7 +2702,7 @@ function matchModifierFilters(g, triState = state.tri) {
       
         const worker = els.worker.value || "w0";
         const url = `wss://openfront.io/${worker}/lobbies`;
-        els.status.textContent = `connecting to ${url} …`;
+        setStatus("Connecting…", "is-connecting");
       
         const ws = new WebSocket(url);
         state.ws = ws;
@@ -2482,27 +2711,26 @@ function matchModifierFilters(g, triState = state.tri) {
         ws.onopen = () => {
           state.reconnectAttempts = 0;
           state.lastMessageAt = Date.now();
-          els.status.textContent = `connected: ${url}`;
+          setStatus("Live", "is-live");
           startStaleWatch();
         };
       
         ws.onclose = () => {
           if (state.manualDisconnect) return;
-          els.status.textContent = `disconnected: ${url}`;
-          scheduleReconnect("disconnected");
+          setStatus("Disconnected", "is-offline");
+          scheduleReconnect();
         };
-      
+
         ws.onerror = () => {
           if (state.manualDisconnect) return;
-          els.status.textContent = `ws error: ${url}`;
-          scheduleReconnect("ws error");
+          setStatus("Connection error", "is-offline");
+          scheduleReconnect();
         };
       
         ws.onmessage = (ev) => {
           try {
             state.lastMessageAt = Date.now();
             state.payload = JSON.parse(ev.data);
-            debugLog("Got payload:", state.payload);
             scheduleRender();
           } catch {}
         };
@@ -2525,6 +2753,8 @@ function matchModifierFilters(g, triState = state.tri) {
           els.maxPlayersEq,
           els.minMaxPlayers,
           els.maxMaxPlayers,
+          els.minPerTeam,
+          els.maxPerTeam,
         ].forEach((el) => {
           el.addEventListener("input", refilter);
           el.addEventListener("change", refilter);
@@ -2549,26 +2779,6 @@ function matchModifierFilters(g, triState = state.tri) {
           setAlertsEnabled(!state.alertsEnabled);
         });
 
-        els.openCardView.addEventListener("click", () => {
-          const url = new URL(window.location.href);
-
-          if (CARD_VIEW_MODE) {
-            url.searchParams.delete("view");
-            window.location.href = url.href;
-            return;
-          }
-
-          try {
-            localStorage.setItem(CARD_FILTER_STORAGE_KEY, JSON.stringify({
-              createdAt: Date.now(),
-              filters: getProfileSnapshot(),
-            }));
-          } catch {}
-
-          url.searchParams.set("view", "cards");
-          window.location.assign(url.href);
-        });
-
         els.toggleFilters.addEventListener("click", () => {
           document.body.classList.toggle("filters-open");
           els.toggleFilters.textContent = document.body.classList.contains("filters-open") ? "Hide filters" : "Filters";
@@ -2591,7 +2801,9 @@ function matchModifierFilters(g, triState = state.tri) {
           els.maxPlayersEq.value = "";
           els.minMaxPlayers.value = "";
           els.maxMaxPlayers.value = "";
-      
+          els.minPerTeam.value = "";
+          els.maxPerTeam.value = "";
+
           initTriState();
           renderModFiltersUI();
           resetAlertBaseline();
@@ -2607,8 +2819,6 @@ function matchModifierFilters(g, triState = state.tri) {
       initCustomSelects();
       initTriState();
 
-      els.openCardView.textContent = CARD_VIEW_MODE ? "Back to table" : "Card view";
-
       const savedActiveProfiles = getSavedActiveProfileNames();
       state.activeProfiles = new Set(savedActiveProfiles);
       state.profileSelectionOrder = savedActiveProfiles.slice();
@@ -2621,16 +2831,6 @@ function matchModifierFilters(g, triState = state.tri) {
         applyProfileSnapshot(lastSavedProfile.filters);
       } else {
         renderModFiltersUI();
-
-        if (CARD_VIEW_MODE) {
-          try {
-            const pending = JSON.parse(localStorage.getItem(CARD_FILTER_STORAGE_KEY) || "null");
-            if (pending?.filters && Date.now() - Number(pending.createdAt || 0) < 120000) {
-              applyProfileSnapshot(pending.filters);
-            }
-            localStorage.removeItem(CARD_FILTER_STORAGE_KEY);
-          } catch {}
-        }
       }
 
       wireInputs();
