@@ -1760,9 +1760,48 @@
         state.ws = null;
       }
       
+      // The lobby socket speaks two dialects, and we support both:
+      //   • Legacy: every frame is the full state — { serverTime, games:{…} } —
+      //     with no "type" field.
+      //   • Delta:  a { type:"full", serverTime, games:{…} } snapshot on connect
+      //     and whenever the set of lobbies changes, then frequent
+      //     { type:"counts", serverTime, counts:{ gameID: numClients } } frames
+      //     that only refresh player counts.
+      // Returns true when the in-memory payload changed and a render is warranted.
+      function applyServerMessage(msg) {
+        if (!msg || typeof msg !== "object") return false;
+
+        if (msg.type === "counts" && msg.counts) {
+          // Delta: patch numClients on the games we already hold. Structure (which
+          // lobbies exist) only ever changes via a full snapshot, so unknown ids
+          // here are simply ignored — the next full snapshot will carry them.
+          if (!state.payload || !state.payload.games) return false;
+          for (const arr of Object.values(state.payload.games)) {
+            if (!Array.isArray(arr)) continue;
+            for (const g of arr) {
+              const id = g && g.gameID;
+              if (id != null && Object.prototype.hasOwnProperty.call(msg.counts, id)) {
+                g.numClients = msg.counts[id];
+              }
+            }
+          }
+          if (typeof msg.serverTime === "number") state.payload.serverTime = msg.serverTime;
+          return true;
+        }
+
+        // Full snapshot — legacy (no type) or { type:"full" }. Guard on `games` so
+        // an unexpected frame can't blow the current lobby list away.
+        if (msg.games && typeof msg.games === "object") {
+          state.payload = msg;
+          return true;
+        }
+
+        return false;
+      }
+
       function connect() {
         clearReconnectTimers();
-      
+
         const worker = els.worker.value || "w0";
         const url = `wss://openfront.io/${worker}/lobbies`;
         setStatus("Connecting…", "is-connecting");
@@ -1793,8 +1832,7 @@
         ws.onmessage = (ev) => {
           try {
             state.lastMessageAt = Date.now();
-            state.payload = JSON.parse(ev.data);
-            scheduleRender();
+            if (applyServerMessage(JSON.parse(ev.data))) scheduleRender();
           } catch {}
         };
       }
