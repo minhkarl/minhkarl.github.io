@@ -44,6 +44,12 @@
 
       * { box-sizing: border-box; }
 
+      /* Always reserve the scrollbar gutter so toggling tall content
+         (e.g. the filters panel) doesn't reflow the page width. */
+      html {
+        scrollbar-gutter: stable;
+      }
+
       body {
         margin: 0;
         font-family: var(--font-sans);
