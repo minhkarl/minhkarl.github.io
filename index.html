@@ -4,1058 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>OpenFront Lobbies</title>
-    <style>
-      :root {
-        color-scheme: dark;
-
-        --bg: #090d15;
-        --bg-2: #0c121d;
-        --panel: #121a27;
-        --panel-2: #16202f;
-        --elev: #0d1420;
-
-        --text: #e9eef7;
-        --muted: #93a4be;
-        --faint: #6b7c96;
-
-        --border: rgba(255, 255, 255, 0.08);
-        --border2: rgba(255, 255, 255, 0.14);
-
-        --accent: #62b0ff;
-        --accent-strong: #8cc9ff;
-        --accent-bg: rgba(98, 176, 255, 0.10);
-        --accent-bg-2: rgba(98, 176, 255, 0.18);
-        --accent-ring: rgba(98, 176, 255, 0.16);
-
-        --ok: #4ade80;
-        --warn: #fbbf24;
-        --danger: #f87171;
-
-        --r-sm: 8px;
-        --r-md: 10px;
-        --r-lg: 14px;
-        --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
-        --shadow-2: 0 10px 30px rgba(0, 0, 0, 0.28);
-        --shadow-3: 0 18px 44px rgba(0, 0, 0, 0.46);
-
-        --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
-      }
-
-      * { box-sizing: border-box; }
-
-      /* Always reserve the scrollbar gutter so toggling tall content
-         (e.g. the filters panel) doesn't reflow the page width. */
-      html {
-        scrollbar-gutter: stable;
-      }
-
-      body {
-        margin: 0;
-        font-family: var(--font-sans);
-        background-color: var(--bg);
-        background-image:
-          radial-gradient(1200px 600px at 80% -10%, rgba(98, 176, 255, 0.10), transparent 60%),
-          radial-gradient(900px 520px at 0% 0%, rgba(98, 176, 255, 0.05), transparent 55%),
-          linear-gradient(180deg, var(--bg-2), var(--bg) 340px);
-        background-attachment: fixed;
-        color: var(--text);
-        -webkit-font-smoothing: antialiased;
-        text-rendering: optimizeLegibility;
-        -webkit-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-        user-select: none;
-        -webkit-touch-callout: none;
-      }
-
-      /* keep the editable filter fields selectable */
-      input,
-      textarea {
-        -webkit-user-select: text;
-        -moz-user-select: text;
-        -ms-user-select: text;
-        user-select: text;
-      }
-
-      /* images are decorative — never draggable */
-      img {
-        -webkit-user-drag: none;
-        -webkit-touch-callout: none;
-      }
-
-      .mono {
-        font-family: var(--font-mono);
-        font-variant-numeric: tabular-nums;
-      }
-
-      ::selection { background: rgba(98, 176, 255, 0.30); }
-
-      * {
-        scrollbar-width: thin;
-        scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-      }
-      *::-webkit-scrollbar { width: 10px; height: 10px; }
-      *::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.14);
-        border-radius: 999px;
-        border: 2px solid transparent;
-        background-clip: content-box;
-      }
-      *::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.26);
-        background-clip: content-box;
-      }
-
-      header {
-        padding: 0;
-      }
-
-      .topbar {
-        position: sticky;
-        top: 0;
-        z-index: 50;
-        width: 100%;
-        margin: 0;
-        box-sizing: border-box;
-        background: rgba(11, 16, 24, 0.82);
-        backdrop-filter: blur(14px) saturate(140%);
-        -webkit-backdrop-filter: blur(14px) saturate(140%);
-        border-bottom: 1px solid var(--border);
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
-        font-size: 15px;
-        font-weight: 800;
-      }
-
-      .topbarInner {
-        width: min(1320px, calc(100% - 36px));
-        min-height: 64px;
-        margin: 0 auto;
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 10px 0;
-        box-sizing: border-box;
-      }
-
-      .brandLogo {
-        display: inline-flex;
-        flex: 0 0 auto;
-        align-items: center;
-        text-decoration: none;
-        opacity: 0.96;
-        transition: opacity 150ms ease, transform 150ms ease;
-      }
-
-      .brandLogo:hover { opacity: 1; transform: translateY(-1px); }
-
-      .brandLogo img {
-        display: block;
-        width: 184px;
-        max-height: 48px;
-      }
-
-      .headerActions {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        min-width: 0;
-      }
-
-      .counts {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 11px;
-        color: var(--muted);
-        margin-left: auto;
-        flex-wrap: wrap;
-      }
-
-      /* shared pill for the status + server-time chips (matched height) */
-      .counts > div {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        min-height: 35px;
-        padding: 0 13px;
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.04);
-        white-space: nowrap;
-      }
-
-      .counts span {
-        font-family: var(--font-mono);
-        font-variant-numeric: tabular-nums;
-        font-weight: 800;
-        color: var(--text);
-      }
-
-      #status {
-        font-weight: 700;
-      }
-
-      #status::before {
-        content: "";
-        flex: 0 0 auto;
-        width: 7px;
-        height: 7px;
-        border-radius: 999px;
-        color: var(--accent);
-        background: currentColor;
-        box-shadow: 0 0 7px 0 currentColor;
-        animation: statusPulse 2.4s ease-in-out infinite;
-      }
-
-      #status.is-live::before { color: var(--ok); }
-      #status.is-connecting::before { color: var(--warn); }
-      #status.is-offline::before { color: var(--danger); animation: none; opacity: 1; }
-
-      @keyframes statusPulse {
-        0%, 100% { opacity: 0.5; }
-        50% { opacity: 1; }
-      }
-
-      @media (max-width: 900px) {
-        .topbarInner {
-          flex-wrap: wrap;
-          gap: 10px 12px;
-          padding: 10px 0 12px;
-        }
-
-        /* Row 1: logo + Discord (pushed right) */
-        .discordGroup {
-          order: 1;
-          margin-left: auto;
-        }
-
-        /* Row 2: action buttons */
-        .headerActions {
-          order: 2;
-          width: 100%;
-        }
-
-        /* Row 3: status + server time */
-        .counts {
-          order: 3;
-          width: 100%;
-          margin-left: 0;
-        }
-      }
-
-      .wrap {
-        padding: 14px 10px 28px;
-        display: grid;
-        gap: 12px;
-      }
-
-      .panel {
-        background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
-          var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--r-lg);
-        padding: 16px 16px 18px;
-        box-shadow: var(--shadow-1);
-      }
-
-      .panelHead {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 16px;
-        padding-bottom: 13px;
-        border-bottom: 1px solid var(--border);
-      }
-
-      .panelTitle {
-        font-size: 13px;
-        font-weight: 900;
-        letter-spacing: 0.10em;
-        text-transform: uppercase;
-        color: var(--text);
-      }
-
-      .resetBtn {
-        width: auto;
-        flex: 0 0 auto;
-        padding: 8px 14px;
-        font-size: 11px;
-        font-weight: 700;
-        white-space: nowrap;
-      }
-
-      .filterGroup { margin-top: 18px; }
-      .filterGroup:first-of-type { margin-top: 0; }
-
-      .filterGroup > .row,
-      .filterGroup > .profileRow,
-      .filterGroup > .modsRow {
-        margin-top: 0;
-      }
-
-      .groupLabel {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 10px;
-        font-weight: 800;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--accent);
-        margin-bottom: 11px;
-      }
-
-      .groupLabel::after {
-        content: "";
-        flex: 1 1 auto;
-        height: 1px;
-        background: linear-gradient(90deg, var(--border2), transparent);
-      }
-
-      .row {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-        column-gap: 10px;
-        row-gap: 14px;
-        align-items: end;
-      }
-      @media (max-width: 500px) {
-        .row {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-      }
-
-label {
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin-bottom: 5px;
-}
-
-input,
-select,
-button {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 7px 9px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.04);
-  color: var(--text);
-  outline: none;
-  font-size: 12px;
-  font-family: inherit;
-  transition: border-color 130ms ease, background 130ms ease, box-shadow 130ms ease;
-}
-
-input::placeholder { color: var(--faint); }
-
-input[type="number"] {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-input:hover,
-select:hover {
-  border-color: var(--border2);
-  background: rgba(255,255,255,0.06);
-}
-
-button {
-  cursor: pointer;
-  font-weight: 700;
-  background: var(--accent-bg);
-  border-color: rgba(98,176,255,0.22);
-}
-
-      input:focus, select:focus, button:focus-visible {
-        border-color: rgba(98,176,255,0.60);
-        box-shadow: 0 0 0 3px var(--accent-ring);
-      }
-
-      button:hover {
-        border-color: rgba(98,176,255,0.45);
-        background: var(--accent-bg-2);
-      }
-
-      button:active { transform: translateY(1px); }
-
-.profileRow {
-  margin-top: 12px;
-  display: grid;
-  grid-template-columns: minmax(130px, 1.4fr) minmax(160px, 1.8fr) repeat(2, minmax(72px, 0.7fr));
-  gap: 10px;
-  align-items: end;
-}
-
-@media (max-width: 700px) {
-  .profileRow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-
-.modsRow {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
-  gap: 8px;
-}
-
-.modBox {
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 9px 10px;
-  background: rgba(255,255,255,0.025);
-  transition: border-color 130ms ease, background 130ms ease;
-}
-
-.modBox:hover {
-  border-color: var(--border2);
-  background: rgba(255,255,255,0.05);
-}
-
-.modTitle {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  margin-bottom: 7px;
-  color: var(--muted);
-}
-
-.triBtns {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
-}
-
-.triBtn {
-  min-width: 0;
-  padding: 6px 4px;
-  border-radius: 7px;
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.03);
-  color: var(--muted);
-  font-weight: 800;
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  text-align: center;
-  white-space: nowrap;
-  user-select: none;
-  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
-}
-
-      .triBtn:hover {
-        border-color: var(--border2);
-        background: rgba(255,255,255,0.06);
-        color: var(--text);
-      }
-
-      .triBtn.active[data-val="any"] {
-        border-color: var(--border2);
-        background: rgba(255,255,255,0.12);
-        color: var(--text);
-      }
-
-      .triBtn.active[data-val="yes"] {
-        border-color: rgba(74,222,128,0.55);
-        background: rgba(74,222,128,0.18);
-        color: #9af3bd;
-      }
-
-      .triBtn.active[data-val="no"] {
-        border-color: rgba(248,113,113,0.55);
-        background: rgba(248,113,113,0.16);
-        color: #ffb4b4;
-      }
-
-
-
-
-      .csel {
-        position: relative;
-        width: 100%;
-      }
-
-      .csel button::-ms-expand { display: none; }
-      .csel button::marker { content: ""; }
-
-.csel-trigger {
-  position: relative;
-  width: 100%;
-  text-align: left;
-  font-weight: 700;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border2);
-  padding: 7px 30px 7px 10px;
-  border-radius: var(--r-sm);
-  color: var(--text);
-  font-size: 12px;
-  transition: border-color 130ms ease, background 130ms ease, box-shadow 130ms ease;
-}
-
-.csel-trigger:hover {
-  border-color: rgba(255,255,255,0.22);
-  background: rgba(255,255,255,0.06);
-}
-
-.csel-opt {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  padding: 8px 10px;
-  border-radius: var(--r-sm);
-  color: var(--text);
-  cursor: pointer;
-  font-weight: 700;
-  text-align: left;
-  font-size: 12px;
-  transition: background 110ms ease;
-}
-
-      .csel-trigger::after {
-        content: "";
-        position: absolute;
-        right: 13px;
-        top: 50%;
-        width: 8px;
-        height: 8px;
-        border-right: 2px solid rgba(233,238,247,0.7);
-        border-bottom: 2px solid rgba(233,238,247,0.7);
-        transform: translateY(-60%) rotate(45deg);
-        transition: transform 250ms ease;
-        pointer-events: none;
-      }
-
-      .csel.open .csel-trigger {
-        border-color: rgba(98,176,255,0.55);
-        box-shadow: 0 0 0 3px var(--accent-ring);
-      }
-
-      .csel.open .csel-trigger::after {
-        transform: translateY(-40%) rotate(225deg);
-      }
-
-      .csel-list {
-        display: none;
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: calc(100% + 6px);
-        background: var(--elev);
-        border: 1px solid var(--border2);
-        border-radius: var(--r-md);
-        padding: 6px;
-        z-index: 9999;
-        max-height: 320px;
-        overflow: auto;
-        box-shadow: var(--shadow-3);
-      }
-
-      .csel.open .csel-list {
-        display: block;
-        animation: cselIn 140ms ease;
-      }
-
-      @keyframes cselIn {
-        from { opacity: 0; transform: translateY(-4px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-
-      .csel-opt:hover { background: rgba(255,255,255,0.07); }
-
-      .csel-opt[aria-selected="true"] {
-        background: var(--accent-bg-2);
-        box-shadow: inset 0 0 0 1px rgba(98,176,255,0.35);
-      }
-
-      .csel[data-select="teamsFilter"] .csel-opt[aria-selected="true"]::before,
-      .csel[data-select="profileSelect"] .csel-opt[aria-selected="true"]::before {
-        content: "✓ ";
-        color: var(--accent);
-      }
-
-      .csel-sep {
-        margin: 6px;
-        height: 1px;
-        background: rgba(255,255,255,0.07);
-      }
-
-      .csel-group {
-        font-size: 10px;
-        letter-spacing: 0.05em;
-        color: var(--faint);
-        font-weight: 800;
-        padding: 9px 10px 4px;
-        text-transform: uppercase;
-      }
-
-
-
-      .alertToggle {
-        width: auto;
-        min-width: 112px;
-        padding: 8px 12px;
-        border-color: var(--border2);
-        background: rgba(255,255,255,0.05);
-        white-space: nowrap;
-      }
-
-      .alertToggle.on {
-        border-color: rgba(98,176,255,0.7);
-        background: var(--accent-bg-2);
-        color: #ffffff;
-        box-shadow: 0 0 0 1px rgba(98,176,255,0.25), 0 0 18px rgba(98,176,255,0.18);
-      }
-
-      .alertToggle.flash {
-        animation: alertButtonPulse 700ms ease-in-out 0s 6;
-      }
-
-      @keyframes alertButtonPulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(98,176,255,0); }
-        50% { box-shadow: 0 0 0 5px rgba(98,176,255,0.22); }
-      }
-
-      .discordGroup {
-        display: flex;
-        flex: 0 0 auto;
-        gap: 8px;
-      }
-
-      .discord-btn {
-        display: inline-flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 3px;
-        width: auto;
-        min-width: 58px;
-        padding: 6px 10px;
-        border-radius: var(--r-sm);
-        background: #5865f2;
-        color: white;
-        text-decoration: none;
-        font-weight: 800;
-        border: 0;
-        box-shadow: 0 6px 18px rgba(88,101,242,0.35);
-        transition: transform 130ms ease, box-shadow 130ms ease, background 130ms ease;
-      }
-
-      .discord-btn:hover {
-        background: #6b76f5;
-        transform: translateY(-1px);
-        box-shadow: 0 10px 24px rgba(88,101,242,0.45);
-      }
-
-      .discord-icon {
-        width: 18px;
-        height: 18px;
-        display: block;
-      }
-
-      .discord-name {
-        font-size: 10px;
-        line-height: 1;
-        letter-spacing: 0.04em;
-      }
-
-
-      .filtersToggle {
-        width: auto;
-        min-width: 118px;
-        padding: 8px 14px;
-        font-size: 12px;
-        white-space: nowrap;
-      }
-
-      .filtersToggle { display: none; }
-
-      .cardView {
-        display: none;
-      }
-
-      .cardGrid {
-        width: min(1240px, 100%);
-        margin: 0 auto;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 18px;
-        align-items: start;
-      }
-
-      .cardColumn {
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
-
-      .colHeader {
-        position: sticky;
-        top: 76px;
-        z-index: 3;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 9px 12px;
-        font-size: 12px;
-        font-weight: 900;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--text);
-        background: rgba(12, 20, 32, 0.82);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid var(--border);
-        border-radius: var(--r-md);
-        box-shadow: var(--shadow-1);
-      }
-
-      .colHeader::before {
-        content: "";
-        width: 9px;
-        height: 9px;
-        border-radius: 999px;
-        background: var(--accent);
-        box-shadow: 0 0 10px 1px currentColor;
-      }
-
-      .colCount {
-        margin-left: auto;
-        font-size: 11px;
-        font-weight: 800;
-        color: var(--muted);
-        padding: 2px 9px;
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.04);
-      }
-
-      .cardColumn[data-cat="ffa"] .colHeader::before { color: #62b0ff; background: #62b0ff; }
-      .cardColumn[data-cat="team"] .colHeader::before { color: #4ade80; background: #4ade80; }
-      .cardColumn[data-cat="special"] .colHeader::before { color: #fbbf24; background: #fbbf24; }
-
-      .cardColumn[data-cat="ffa"] .colHeader { border-color: rgba(98, 176, 255, 0.35); }
-      .cardColumn[data-cat="team"] .colHeader { border-color: rgba(74, 222, 128, 0.32); }
-      .cardColumn[data-cat="special"] .colHeader { border-color: rgba(251, 191, 36, 0.32); }
-
-      .colCards {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 14px;
-      }
-
-      .colEmpty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        min-height: 150px;
-        padding: 24px 16px;
-        border: 1px dashed rgba(255, 255, 255, 0.14);
-        border-radius: var(--r-lg);
-        background: rgba(8, 14, 23, 0.5);
-        color: var(--faint);
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        text-align: center;
-      }
-
-      .spawnDot {
-        width: 26px;
-        height: 26px;
-        border-radius: 999px;
-        border: 2px solid rgba(98, 176, 255, 0.25);
-        border-top-color: var(--accent);
-        animation: spawnSpin 0.9s linear infinite;
-      }
-
-      @keyframes spawnSpin {
-        to { transform: rotate(360deg); }
-      }
-
-      .gameCard {
-        position: relative;
-        min-width: 0;
-        overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: var(--r-lg);
-        background: rgba(8, 14, 23, 0.94);
-        box-shadow: var(--shadow-2);
-        cursor: pointer;
-        transition: border-color 160ms ease, box-shadow 160ms ease;
-      }
-
-      .gameCard:hover,
-      .gameCard:focus-visible {
-        border-color: rgba(98, 176, 255, 0.72);
-        box-shadow: var(--shadow-3), 0 0 0 1px rgba(98, 176, 255, 0.22);
-        outline: none;
-      }
-
-      .gameCard.newMatchFlash {
-        animation: cardMatchFlash 1400ms ease-in-out 0s 4;
-      }
-
-      @keyframes cardMatchFlash {
-        0%, 100% { box-shadow: var(--shadow-2); }
-        45% { box-shadow: 0 0 0 3px rgba(98,176,255,0.55), 0 18px 36px rgba(0,0,0,0.48); }
-      }
-
-      .gameCardImage {
-        position: relative;
-        height: 190px;
-        overflow: hidden;
-        background: linear-gradient(135deg, #17253a, #0b111b);
-      }
-
-      .gameCardImage img {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        transition: transform 260ms ease;
-      }
-
-      .gameCard:hover .gameCardImage img {
-        transform: scale(1.04);
-      }
-
-      .gameCardImage::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(to bottom, rgba(5, 9, 15, 0.02) 30%, rgba(5, 9, 15, 0.78) 100%);
-        pointer-events: none;
-      }
-
-      .cardBadges {
-        position: absolute;
-        top: 8px;
-        left: 8px;
-        right: 80px;
-        z-index: 2;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 5px;
-      }
-
-      .cardBadge,
-      .cardTime,
-      .cardPlayers {
-        border-radius: 7px;
-        padding: 5px 8px;
-        font-size: 11px;
-        line-height: 1.15;
-        font-weight: 900;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-        color: white;
-        background: rgba(7, 14, 23, 0.82);
-        backdrop-filter: blur(6px);
-        -webkit-backdrop-filter: blur(6px);
-        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
-      }
-
-      .cardBadge {
-        background: rgba(98, 176, 255, 0.92);
-        color: #07101b;
-      }
-
-      .cardTime {
-        position: absolute;
-        z-index: 2;
-        top: 8px;
-        right: 8px;
-        background: rgba(98, 176, 255, 0.95);
-        color: #07101b;
-        text-transform: none;
-        font-size: 12px;
-      }
-
-      .cardPlayers {
-        position: absolute;
-        z-index: 2;
-        right: 8px;
-        bottom: 8px;
-        text-transform: none;
-        font-size: 12px;
-      }
-
-      .gameCardInfo {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        padding: 13px 14px 14px;
-        background: linear-gradient(110deg, rgba(7, 14, 23, 0.98) 0%, rgba(14, 25, 39, 0.98) 68%, rgba(98, 176, 255, 0.12) 100%);
-      }
-
-      .gameCardTop {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 12px;
-        align-items: center;
-      }
-
-      .gameCardText {
-        min-width: 0;
-      }
-
-      .gameCardTitle {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 17px;
-        font-weight: 950;
-        letter-spacing: 0.015em;
-        text-transform: uppercase;
-      }
-
-      .gameCardMode {
-        margin-top: 3px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: rgba(233, 238, 247, 0.72);
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-      }
-
-      .cardCode {
-        flex: 0 0 auto;
-        font-size: 14px;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-        color: var(--muted);
-        white-space: nowrap;
-      }
-
-      .cardEmpty {
-        grid-column: 1 / -1;
-        padding: 38px 18px;
-        border: 1px dashed rgba(255,255,255,0.16);
-        border-radius: var(--r-lg);
-        text-align: center;
-        color: var(--muted);
-        background: rgba(8,14,23,0.7);
-        backdrop-filter: blur(8px);
-      }
-
-      body.card-view {
-        min-height: 100vh;
-        background-color: #0a1019;
-        background-image:
-          linear-gradient(rgba(6, 11, 18, 0.55), rgba(6, 11, 18, 0.8)),
-          url("https://cdn.ofedge.io/game_assets/_assets/images/background.e795d7faa9e4.webp");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-      }
-
-      body.card-view .topbar {
-        width: 100%;
-        margin: 0;
-        padding: 0;
-        background: rgba(11, 14, 20, 0.78);
-        border-bottom: 1px solid var(--border);
-        backdrop-filter: blur(14px) saturate(140%);
-        -webkit-backdrop-filter: blur(14px) saturate(140%);
-      }
-
-      body.card-view .wrap {
-        width: min(1320px, calc(100% - 40px));
-        min-height: calc(100vh - 91px);
-        margin: 0 auto;
-        padding: 18px 0 54px;
-        box-sizing: border-box;
-      }
-
-      body.card-view .panel {
-        width: min(1240px, 100%);
-        margin: 0 auto 18px;
-        padding: 16px;
-        background: rgba(12, 20, 32, 0.86);
-        backdrop-filter: blur(12px);
-        border-radius: var(--r-lg);
-      }
-
-      body.card-view .panel label,
-      body.card-view .modTitle {
-        font-size: 11px;
-      }
-
-      body.card-view .panel input,
-      body.card-view .panel select,
-      body.card-view .panel button,
-      body.card-view .csel-trigger,
-      body.card-view .csel-opt {
-        min-height: 34px;
-        font-size: 12px;
-      }
-
-      body.card-view:not(.filters-open) .panel {
-        display: none;
-      }
-
-      body.card-view .filtersToggle {
-        display: inline-block;
-      }
-
-      body.card-view .cardView {
-        min-height: calc(100vh - 150px);
-        display: flex;
-        align-items: flex-start;
-        justify-content: center;
-        padding: 26px 0 46px;
-        box-sizing: border-box;
-      }
-
-      body.card-view .discord-btn {
-        background: rgba(88, 101, 242, 0.86);
-      }
-
-      @media (max-width: 1000px) {
-        .cardGrid {
-          grid-template-columns: 1fr;
-          gap: 26px;
-        }
-
-        .colHeader {
-          position: static;
-        }
-
-        .colCards {
-          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-        }
-      }
-
-      @media (max-width: 560px) {
-        .colCards {
-          grid-template-columns: 1fr;
-        }
-
-        .gameCardImage {
-          height: 190px;
-        }
-
-        body.card-view .wrap {
-          width: min(calc(100% - 20px), 1320px);
-        }
-      }
-
-    </style>
+    <link rel="stylesheet" href="styles.css" />
   </head>
 
   <body>
@@ -1069,8 +18,8 @@ button {
         </a>
 
         <div class="headerActions">
-          <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
           <button id="toggleFilters" class="filtersToggle" type="button">Filters</button>
+          <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
         </div>
 
         <div class="counts">
@@ -1092,6 +41,7 @@ button {
     </header>
     
     <div class="wrap">
+      <div class="panelShell" id="panelShell">
       <div class="panel">
         <div class="panelHead">
           <div class="panelTitle">Filters</div>
@@ -1226,6 +176,7 @@ button {
           <div class="groupLabel">Modifiers</div>
           <div class="modsRow" id="modFilters"></div>
         </div>
+      </div>
       </div>
 
       <div id="cardView" class="cardView">
@@ -1578,6 +529,7 @@ button {
         cardGrid: $("cardGrid"),
         alertToggle: $("alertToggle"),
         toggleFilters: $("toggleFilters"),
+        panelShell: $("panelShell"),
       };
       
       const state = {
@@ -1600,10 +552,10 @@ button {
         originalTitle: document.title,
         audioCtx: null,
         renderScheduled: false,
-        lastCardsHtml: "",
         lastStructSig: "",
-        pendingCardsHtml: null,
+        pendingStructure: null,
         cardsHoverHold: false,
+        filtersOpenTimer: null,
 
         reconnectTimer: null,
         staleTimer: null,
@@ -2238,28 +1190,153 @@ button {
         }
       }
       
-      function setCardsHtml(html) {
-        if (html === state.lastCardsHtml) return;
+      const FLIP_MS = 260;
+      const prefersReducedMotion = () =>
+        !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
-        // While the pointer is over the grid, don't rebuild it: replacing
-        // innerHTML destroys the hovered card (its hover style animates in
-        // again each time = flicker) and can reorder cards out from under the
-        // cursor. Stash the latest markup and apply it once the pointer leaves.
+      function nodeFromHtml(html) {
+        const t = document.createElement("template");
+        t.innerHTML = html.trim();
+        return t.content.firstElementChild;
+      }
+
+      // Build the three empty column shells once. Cards are filled in (and reused)
+      // by reconcileColumn — we never blow away the whole grid, so images that are
+      // already decoded stay put instead of flashing back to their placeholder.
+      function ensureColumns() {
+        if (els.cardGrid.querySelector(".cardColumn")) return;
+        els.cardGrid.innerHTML = CARD_COLUMNS.map((col) => `
+          <section class="cardColumn" data-cat="${col.key}">
+            <div class="colHeader">${escapeHtml(col.label)}<span class="colCount mono" data-col-count="${col.key}">0</span></div>
+            <div class="colCards" data-col-cards="${col.key}"></div>
+          </section>
+        `).join("");
+      }
+
+      // Reconcile one column's cards against the desired game list, keyed by id:
+      // reuse the node for a game that's still here, create one for a new game,
+      // drop the node for a game that left, then put everything in sorted order.
+      function reconcileColumn(col, games, serverTime) {
+        const host = els.cardGrid.querySelector(`.colCards[data-col-cards="${col.key}"]`);
+        if (!host) return;
+
+        const countEl = els.cardGrid.querySelector(`[data-col-count="${col.key}"]`);
+        if (countEl) countEl.textContent = String(games.length);
+
+        const existing = new Map();
+        host.querySelectorAll(":scope > .gameCard[data-game-id]").forEach((n) => existing.set(n.dataset.gameId, n));
+
+        const order = [];
+        const keep = new Set();
+        for (const g of games) {
+          const id = String(g.id || "");
+          let node = id ? existing.get(id) : null;
+          if (node) {
+            keep.add(id);
+          } else {
+            try {
+              node = nodeFromHtml(cardHtml(g, serverTime));
+            } catch (e) {
+              node = nodeFromHtml(`<div class="cardEmpty mono" style="color:#ff8f8f">Error: ${escapeHtml(e.message)}</div>`);
+            }
+          }
+          if (node) order.push(node);
+        }
+        for (let i = games.length; i < COLUMN_MIN_SLOTS; i++) order.push(nodeFromHtml(spawnPlaceholderHtml()));
+
+        // Drop cards whose game is gone, plus any stale placeholders.
+        existing.forEach((node, id) => { if (!keep.has(id)) node.remove(); });
+        host.querySelectorAll(":scope > .colEmpty").forEach((n) => n.remove());
+
+        // Place every node at its target index, moving survivors as needed.
+        order.forEach((node, i) => {
+          const current = host.children[i];
+          if (current !== node) host.insertBefore(node, current || null);
+        });
+        while (host.children.length > order.length) host.lastElementChild.remove();
+      }
+
+      function captureCardRects() {
+        const rects = new Map();
+        els.cardGrid.querySelectorAll(".gameCard[data-game-id]").forEach((card) => {
+          rects.set(card.dataset.gameId, card.getBoundingClientRect());
+        });
+        return rects;
+      }
+
+      function applyStructure(buckets, serverTime, sig) {
+        // While the pointer is over the grid, don't restructure it: moving a card
+        // out from under the cursor mid-hover is jarring. Stash the latest data and
+        // apply it once the pointer leaves. lastStructSig stays untouched so the
+        // deferred change still reads as pending on the next render.
         if (state.cardsHoverHold) {
-          state.pendingCardsHtml = html;
+          state.pendingStructure = { buckets, serverTime, sig };
           return;
         }
+        state.pendingStructure = null;
 
-        els.cardGrid.innerHTML = html;
-        state.lastCardsHtml = html;
-        state.pendingCardsHtml = null;
+        ensureColumns();
+
+        // FIRST: where does every surviving card sit before we reorder?
+        const prevRects = prefersReducedMotion() ? null : captureCardRects();
+
+        for (const col of CARD_COLUMNS) reconcileColumn(col, buckets[col.key], serverTime);
+
+        if (prevRects) flipCards(prevRects);
+        state.lastStructSig = sig;
+      }
+
+      // Slide surviving cards from their old positions to their new ones — e.g. the
+      // game at [0] ends and [1] shifts up into its place. Classic FLIP: reconcile
+      // already moved the nodes, so Invert them back to the old spot, then Play.
+      function flipCards(prevRects) {
+        const moved = [];
+
+        els.cardGrid.querySelectorAll(".gameCard[data-game-id]").forEach((card) => {
+          const prev = prevRects.get(card.dataset.gameId);
+          if (!prev) return;                                 // brand-new card — let it just appear
+          const now = card.getBoundingClientRect();
+          const dx = prev.left - now.left;
+          const dy = prev.top - now.top;
+          if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;  // didn't actually move
+
+          card.style.transition = "none";
+          card.style.transform = `translate(${dx}px, ${dy}px)`;
+          moved.push(card);
+        });
+
+        if (!moved.length) return;
+
+        // PLAY: next frame, drop the offset and let it ease into its real spot.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            for (const card of moved) {
+              card.style.transition = `transform ${FLIP_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1)`;
+              card.style.transform = "";
+            }
+          });
+        });
+
+        // Strip the inline styles once settled so hover transitions resume normally.
+        for (const card of moved) {
+          let done = false;
+          const cleanup = (e) => {
+            if (done || (e && e.propertyName && e.propertyName !== "transform")) return;
+            done = true;
+            card.style.transition = "";
+            card.style.transform = "";
+            card.removeEventListener("transitionend", cleanup);
+          };
+          card.addEventListener("transitionend", cleanup);
+          setTimeout(cleanup, FLIP_MS + 120);
+        }
       }
 
       function flushPendingCards() {
-        if (state.pendingCardsHtml === null) return;
-        const html = state.pendingCardsHtml;
-        state.pendingCardsHtml = null;
-        setCardsHtml(html);
+        if (!state.pendingStructure) return;
+        const { buckets, serverTime, sig } = state.pendingStructure;
+        state.pendingStructure = null;
+        applyStructure(buckets, serverTime, sig);
       }
       
       function scheduleRender() {
@@ -2561,27 +1638,6 @@ button {
         return `<div class="colEmpty"><span class="spawnDot"></span>Spawning game…</div>`;
       }
 
-      function columnHtml(col, games, serverTime) {
-        // Every game in the feed is a real card — including the next, not-yet-full
-        // lobby (0 players, no countdown). Placeholders only fill empty slots.
-        const slots = games.map((g) => {
-          try {
-            return cardHtml(g, serverTime);
-          } catch (e) {
-            return `<div class="cardEmpty mono" style="color:#ff8f8f">Error: ${escapeHtml(e.message)}</div>`;
-          }
-        });
-
-        for (let i = slots.length; i < COLUMN_MIN_SLOTS; i++) slots.push(spawnPlaceholderHtml());
-
-        return `
-          <section class="cardColumn" data-cat="${col.key}">
-            <div class="colHeader">${escapeHtml(col.label)}<span class="colCount mono">${games.length}</span></div>
-            <div class="colCards">${slots.join("")}</div>
-          </section>
-        `;
-      }
-
       // Identifies the *structure*: which game IDs are in which column, plus the
       // chosen sort. Player counts / countdowns changing does NOT change this, so
       // a number-only tick patches in place; adding/removing a game rebuilds.
@@ -2636,18 +1692,19 @@ button {
           if (buckets[cat]) buckets[cat].push(g);
         }
 
-        // Same cards as last time? Just tick the timers/counts — no rebuild,
-        // no flash, no movement. Only add/remove/sort/filter rebuilds the grid.
+        // Structure = which game ids live in which column. Only that changing
+        // touches the card nodes (add / remove / reorder); player counts and
+        // countdowns just patch in place below.
         const sig = structSignature(buckets, f.sort);
         const alreadyBuilt = !!els.cardGrid.querySelector(".cardColumn");
 
-        if (sig === state.lastStructSig && alreadyBuilt) {
-          updateLiveFields(sorted, serverTime);
-          return;
+        if (sig !== state.lastStructSig || !alreadyBuilt) {
+          applyStructure(buckets, serverTime, sig);
+        } else {
+          // Shown structure already matches — drop any defer that's now obsolete.
+          state.pendingStructure = null;
         }
 
-        state.lastStructSig = sig;
-        setCardsHtml(CARD_COLUMNS.map((col) => columnHtml(col, buckets[col.key], serverTime)).join(""));
         updateLiveFields(sorted, serverTime);
       }
       
@@ -2786,8 +1843,22 @@ button {
         });
 
         els.toggleFilters.addEventListener("click", () => {
-          document.body.classList.toggle("filters-open");
-          els.toggleFilters.textContent = document.body.classList.contains("filters-open") ? "Hide filters" : "Filters";
+          const open = document.body.classList.toggle("filters-open");
+          els.toggleFilters.textContent = open ? "Hide filters" : "Filters";
+
+          // The panel is clipped (overflow:hidden) so it can slide open/closed
+          // without spilling. But that clip would also cut off the filter dropdowns,
+          // so lift it once the panel is fully expanded — and re-apply it the moment
+          // we start collapsing.
+          clearTimeout(state.filtersOpenTimer);
+          if (!els.panelShell) return;
+          if (open) {
+            const reveal = () => els.panelShell.classList.add("filters-shown");
+            if (prefersReducedMotion()) reveal();
+            else state.filtersOpenTimer = setTimeout(reveal, 340);
+          } else {
+            els.panelShell.classList.remove("filters-shown");
+          }
         });
 
         els.profileSave.addEventListener("click", saveCurrentProfile);
