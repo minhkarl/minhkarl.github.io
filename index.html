@@ -20,6 +20,7 @@
         <div class="headerActions">
           <button id="toggleFilters" class="filtersToggle" type="button">Filters</button>
           <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
+          <button id="viewToggle" class="viewToggle" type="button">Detailed table</button>
         </div>
 
         <div class="counts">
@@ -184,7 +185,31 @@
           <div class="cardEmpty mono">waiting for data…</div>
         </div>
       </div>
-
+      <div id="tableView" class="tableView">
+        <div class="tableScroll">
+          <table class="lobbyTable">
+            <thead>
+              <tr>
+                <th>Join</th>
+                <th>Map / Mode</th>
+                <th>Game ID</th>
+                <th>Type</th>
+                <th>Players</th>
+                <th>Team size</th>
+                <th>Starts</th>
+                <th>Modifiers</th>
+                <th>Configuration</th>
+              </tr>
+            </thead>
+      
+            <tbody id="tableRows">
+              <tr>
+                <td colspan="9" class="mono">Waiting for data…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -527,6 +552,9 @@
         modFilters: $("modFilters"),
         serverTime: $("serverTime"),
         cardGrid: $("cardGrid"),
+        viewToggle: $("viewToggle"),
+        tableView: $("tableView"),
+        tableRows: $("tableRows"),
         alertToggle: $("alertToggle"),
         toggleFilters: $("toggleFilters"),
         panelShell: $("panelShell"),
@@ -562,6 +590,11 @@
         lastMessageAt: 0,
         reconnectAttempts: 0,
         manualDisconnect: false,
+
+        view:
+          localStorage.getItem("openfrontLobbyView") === "table"
+            ? "table"
+            : "cards",
       };
       
 
@@ -1683,7 +1716,10 @@
         const sorted = sortGames(filtered, f.sort);
 
         handleNewMatchingGames(sorted, f);
-
+        if (state.view === "table") {
+          renderTable(sorted, serverTime);
+          return;
+        }
         // The socket already groups lobbies into ffa / team / special — keep each
         // game in the column the server assigned it to.
         const buckets = { ffa: [], team: [], special: [] };
@@ -1836,7 +1872,358 @@
           } catch {}
         };
       }
-      
+      function setLobbyView(view) {
+        state.view = view === "table" ? "table" : "cards";
+
+        document.body.classList.toggle(
+          "table-mode",
+          state.view === "table"
+        );
+
+        els.viewToggle.textContent =
+          state.view === "table"
+            ? "Card view"
+            : "Detailed table";
+
+        localStorage.setItem("openfrontLobbyView", state.view);
+
+        scheduleRender();
+      }
+      function tablePlayerText(game) {
+        return game.maxPlayers === null
+          ? String(game.joined ?? 0)
+          : `${game.joined ?? 0}/${game.maxPlayers}`;
+      }
+
+      function tableTeamSizeText(game) {
+        return Number.isFinite(game.playersPerTeam)
+          ? String(game.playersPerTeam)
+          : "—";
+      }
+
+      function tableModifierHtml(game) {
+        const modifiers = gameModifierLabels(game);
+
+        if (!modifiers.length) {
+          return `<span class="tableTag">Default</span>`;
+        }
+
+        return modifiers
+          .map(
+            (label) =>
+              `<span class="tableTag">${escapeHtml(label)}</span>`
+          )
+          .join("");
+      }
+
+      function tableConfigText(game) {
+        return JSON.stringify(
+          game.raw?.gameConfig || game.cfg || {},
+          null,
+          2
+        );
+      }
+
+      function tableRowHtml(game, serverTime) {
+        const gameID = String(game.id || "");
+        const map = String(game.map || "Unknown");
+        const joinUrl = getJoinUrl(gameID);
+        const thumbnail = getMapThumbnailUrl(map);
+        const startsRaw = game.startsAt
+          ? String(game.startsAt)
+          : "—";
+
+        return `
+          <tr data-game-id="${escapeHtml(gameID)}">
+            <td>
+              <a
+                class="tableJoin"
+                data-table-join
+                href="${escapeHtml(joinUrl)}"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Join
+              </a>
+            </td>
+
+            <td>
+              <div class="tableMap">
+                <img
+                  data-table-map-image
+                  src="${escapeHtml(thumbnail)}"
+                  alt="${escapeHtml(map)}"
+                  loading="lazy"
+                  decoding="async"
+                />
+
+                <div>
+                  <div
+                    class="tableMapName"
+                    data-table-map-name
+                  >
+                    ${escapeHtml(map)}
+                  </div>
+
+                  <div
+                    class="tableMode"
+                    data-table-mode
+                  >
+                    ${escapeHtml(modeSummaryLine(game))}
+                  </div>
+                </div>
+              </div>
+            </td>
+
+            <td
+              class="mono"
+              data-table-id
+            >
+              ${escapeHtml(gameID)}
+            </td>
+
+            <td
+              class="mono"
+              data-table-type
+            >
+              ${escapeHtml(getLobbyType(game))}
+            </td>
+
+            <td
+              class="mono"
+              data-table-players
+            >
+              ${escapeHtml(tablePlayerText(game))}
+            </td>
+
+            <td
+              class="mono"
+              data-table-team-size
+            >
+              ${escapeHtml(tableTeamSizeText(game))}
+            </td>
+
+            <td>
+              <div data-table-starts>
+                ${escapeHtml(formatCardStarts(game, serverTime))}
+              </div>
+
+              <div
+                class="mono tableMode"
+                data-table-starts-raw
+              >
+                ${escapeHtml(startsRaw)}
+              </div>
+            </td>
+
+            <td>
+              <div
+                class="tableTags"
+                data-table-tags
+              >
+                ${tableModifierHtml(game)}
+              </div>
+            </td>
+
+            <td>
+              <details class="configDetails">
+                <summary>View config</summary>
+
+                <pre data-table-config>${escapeHtml(
+                  tableConfigText(game)
+                )}</pre>
+              </details>
+            </td>
+          </tr>
+        `;
+      }
+
+      function createTableRow(game, serverTime) {
+        const template = document.createElement("template");
+
+        template.innerHTML = tableRowHtml(
+          game,
+          serverTime
+        ).trim();
+
+        return template.content.firstElementChild;
+      }
+
+      function setTableText(row, selector, value) {
+        const element = row.querySelector(selector);
+
+        if (element && element.textContent !== value) {
+          element.textContent = value;
+        }
+      }
+
+      function updateTableRow(row, game, serverTime) {
+        const gameID = String(game.id || "");
+        const map = String(game.map || "Unknown");
+        const thumbnail = getMapThumbnailUrl(map);
+        const joinUrl = getJoinUrl(gameID);
+
+        row.dataset.gameId = gameID;
+
+        const joinLink = row.querySelector("[data-table-join]");
+
+        if (
+          joinLink &&
+          joinLink.getAttribute("href") !== joinUrl
+        ) {
+          joinLink.setAttribute("href", joinUrl);
+        }
+
+        const image = row.querySelector(
+          "[data-table-map-image]"
+        );
+
+        if (image) {
+          if (image.getAttribute("src") !== thumbnail) {
+            image.setAttribute("src", thumbnail);
+          }
+
+          if (image.getAttribute("alt") !== map) {
+            image.setAttribute("alt", map);
+          }
+        }
+
+        setTableText(
+          row,
+          "[data-table-map-name]",
+          map
+        );
+
+        setTableText(
+          row,
+          "[data-table-mode]",
+          modeSummaryLine(game)
+        );
+
+        setTableText(
+          row,
+          "[data-table-id]",
+          gameID
+        );
+
+        setTableText(
+          row,
+          "[data-table-type]",
+          getLobbyType(game)
+        );
+
+        setTableText(
+          row,
+          "[data-table-players]",
+          tablePlayerText(game)
+        );
+
+        setTableText(
+          row,
+          "[data-table-team-size]",
+          tableTeamSizeText(game)
+        );
+
+        setTableText(
+          row,
+          "[data-table-starts]",
+          formatCardStarts(game, serverTime)
+        );
+
+        setTableText(
+          row,
+          "[data-table-starts-raw]",
+          game.startsAt ? String(game.startsAt) : "—"
+        );
+
+        const tags = row.querySelector(
+          "[data-table-tags]"
+        );
+
+        const nextTags = tableModifierHtml(game);
+
+        if (tags && tags.innerHTML !== nextTags) {
+          tags.innerHTML = nextTags;
+        }
+
+        setTableText(
+          row,
+          "[data-table-config]",
+          tableConfigText(game)
+        );
+      }
+
+      function renderTable(games, serverTime) {
+        const tbody = els.tableRows;
+
+        if (!games.length) {
+          const alreadyEmpty =
+            tbody.querySelector("[data-table-empty]");
+
+          if (!alreadyEmpty) {
+            tbody.innerHTML = `
+              <tr data-table-empty>
+                <td colspan="9" class="mono">
+                  No matching lobbies
+                </td>
+              </tr>
+            `;
+          }
+
+          return;
+        }
+
+        const existingRows = new Map();
+
+        tbody
+          .querySelectorAll("tr[data-game-id]")
+          .forEach((row) => {
+            existingRows.set(
+              row.dataset.gameId,
+              row
+            );
+          });
+
+        const wantedIDs = new Set();
+        let cursor = tbody.firstElementChild;
+
+        for (const game of games) {
+          const gameID = String(game.id || "");
+          wantedIDs.add(gameID);
+
+          let row = existingRows.get(gameID);
+
+          if (!row) {
+            row = createTableRow(
+              game,
+              serverTime
+            );
+          } else {
+            updateTableRow(
+              row,
+              game,
+              serverTime
+            );
+          }
+
+          if (row === cursor) {
+            cursor = cursor.nextElementSibling;
+          } else {
+            tbody.insertBefore(row, cursor);
+          }
+        }
+
+        Array.from(tbody.children).forEach((row) => {
+          if (!row.matches("tr[data-game-id]")) {
+            row.remove();
+            return;
+          }
+
+          if (!wantedIDs.has(row.dataset.gameId)) {
+            row.remove();
+          }
+        });
+      }
       function wireInputs() {
         const rerender = () => scheduleRender();
         const refilter = () => {
@@ -1929,6 +2316,12 @@
           els.hideEmpty.dispatchEvent(new Event("change", { bubbles: true }));
           els.sort.dispatchEvent(new Event("change", { bubbles: true }));
         });
+
+        els.viewToggle.addEventListener("click", () => {
+          setLobbyView(
+            state.view === "cards" ? "table" : "cards"
+          );
+        });
       }
       
       initCustomSelects();
@@ -1949,6 +2342,7 @@
       }
 
       wireInputs();
+      setLobbyView(state.view);
       wireActionLinks();
       updateAlertToggleUI();
       connect();
