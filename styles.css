@@ -449,20 +449,20 @@ button:active { transform: translateY(1px); }
   color: var(--text);
 }
 
-.triBtn.active[data-val="any"] {
-  border-color: var(--border2);
-  background: rgba(255,255,255,0.12);
-  color: var(--text);
+.triBtn.active[data-val="or"] {
+  border-color: rgba(98,176,255,0.65);
+  background: rgba(98,176,255,0.18);
+  color: var(--accent-strong);
 }
 
-.triBtn.active[data-val="yes"] {
-  border-color: rgba(74,222,128,0.55);
+.triBtn.active[data-val="and"] {
+  border-color: rgba(74,222,128,0.60);
   background: rgba(74,222,128,0.18);
   color: #9af3bd;
 }
 
-.triBtn.active[data-val="no"] {
-  border-color: rgba(248,113,113,0.55);
+.triBtn.active[data-val="not"] {
+  border-color: rgba(248,113,113,0.60);
   background: rgba(248,113,113,0.16);
   color: #ffb4b4;
 }
@@ -1090,7 +1090,8 @@ body.card-view .discord-btn {
   display: none;
   width: min(1320px, 100%);
   margin: 0 auto;
-  padding: 26px 0 46px;
+  padding: 26px 8px 46px;
+  overflow-x: auto;
 }
 
 body.table-mode .cardView {
@@ -1101,43 +1102,11 @@ body.table-mode .tableView {
   display: block;
 }
 
-.tableScroll {
-  width: 100%;
-  overflow-x: auto;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: rgba(8, 14, 23, 0.94);
-  box-shadow: var(--shadow-2);
-}
-
 .lobbyTable {
   width: 100%;
   min-width: 1250px;
   border-collapse: separate;
   border-spacing: 0 8px;
-}
-
-.lobbyTable th {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  padding: 11px 12px;
-  border-bottom: 1px solid var(--border2);
-  background: rgba(12, 20, 32, 0.97);
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-align: left;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-@media (max-width: 900px) {
-  .lobbyTable th {
-    top: 170px;
-  }
 }
 
 .lobbyTable tbody td {
@@ -1191,6 +1160,34 @@ body.table-mode .tableView {
     inset 0 -1px 0 rgba(98, 176, 255, 0.75);
 }
 
+.lobbyTable tbody tr.newMatchFlash {
+  animation: tableMatchGlow 1400ms ease-in-out 0s 4;
+}
+
+.lobbyTable tbody tr.newMatchFlash td {
+  animation: tableMatchFill 1400ms ease-in-out 0s 4;
+}
+
+@keyframes tableMatchGlow {
+  0%, 100% {
+    filter: none;
+  }
+  45% {
+    filter:
+      drop-shadow(0 0 5px rgba(98, 176, 255, 0.9))
+      drop-shadow(0 0 18px rgba(98, 176, 255, 0.48));
+  }
+}
+
+@keyframes tableMatchFill {
+  0%, 100% {
+    background: rgba(8, 14, 23, 0.94);
+  }
+  45% {
+    background: rgba(98, 176, 255, 0.24);
+  }
+}
+
 .tableMap {
   display: flex;
   align-items: center;
@@ -1232,6 +1229,41 @@ body.table-mode .tableView {
   font-size: 11px;
 }
 
+.tableActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.tableCopy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-height: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--border2);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.tableCopy:hover {
+  border-color: rgba(98, 176, 255, 0.48);
+  background: var(--accent-bg-2);
+  color: var(--text);
+}
+
+.tableCopy.copied {
+  border-color: rgba(74, 222, 128, 0.58);
+  background: rgba(74, 222, 128, 0.16);
+  color: #9af3bd;
+}
+
 .tableJoin {
   display: inline-flex;
   padding: 7px 12px;
@@ -1264,6 +1296,11 @@ body.table-mode .tableView {
   white-space: nowrap;
 }
 
+.configDetails {
+  position: relative;
+  display: inline-block;
+}
+
 .configDetails summary {
   cursor: pointer;
   color: var(--accent);
@@ -1271,17 +1308,268 @@ body.table-mode .tableView {
   white-space: nowrap;
 }
 
+.configDetails[open] {
+  z-index: 100;
+}
+
 .configDetails pre {
-  width: 440px;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+
+  width: min(440px, calc(100vw - 32px));
   max-height: 300px;
-  margin: 10px 0 0;
+  margin: 0;
   padding: 10px;
+
   overflow: auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border2);
   border-radius: var(--r-sm);
   background: #070b12;
   color: var(--text);
+  box-shadow: var(--shadow-3);
+
   font-family: var(--font-mono);
   font-size: 10px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  z-index: 100;
+}
+/* Responsive detailed table */
+
+.lobbyTable {
+  width: 100%;
+  min-width: 0;
+}
+
+.tableMap {
+  min-width: 0;
+}
+
+.tableMap img {
+  width: clamp(72px, 9vw, 120px);
+  height: auto;
+  aspect-ratio: 5 / 3;
+}
+
+.tableTags {
+  min-width: 0;
+}
+
+.configDetails pre {
+  width: min(440px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+}
+
+
+/* Slightly smaller table on medium screens */
+
+@media (max-width: 1100px) {
+  .lobbyTable tbody td {
+    padding: 9px 8px;
+    font-size: 11px;
+  }
+
+  .tableMap {
+    gap: 8px;
+  }
+
+  .tableMapName {
+    font-size: 12px;
+  }
+
+  .tableMode {
+    font-size: 10px;
+  }
+
+  .tableJoin,
+  .tableCopy {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .tableTags {
+    max-width: 160px;
+  }
+}
+
+
+/* Turn every lobby row into a responsive card */
+
+@media (max-width: 800px) {
+  .tableView {
+    width: 100%;
+    padding: 16px 8px 36px;
+    overflow: visible;
+  }
+
+  .lobbyTable,
+  .lobbyTable tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .lobbyTable {
+    border-spacing: 0;
+  }
+
+  .lobbyTable tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin-bottom: 12px;
+    overflow: visible;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(8, 14, 23, 0.94);
+  }
+
+  .lobbyTable tbody td {
+    display: block;
+    min-width: 0;
+    padding: 9px 10px;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow-wrap: anywhere;
+  }
+
+  .lobbyTable tbody td:first-child,
+  .lobbyTable tbody td:last-child {
+    border-radius: 0;
+  }
+
+  /* Map and mode */
+  .lobbyTable tbody td:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Join and copy buttons */
+  .lobbyTable tbody td:nth-child(1) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Modifiers */
+  .lobbyTable tbody td:nth-child(8) {
+    grid-column: 1 / -1;
+  }
+
+  /* View config */
+  .lobbyTable tbody td:nth-child(9) {
+    grid-column: 1 / -1;
+  }
+
+  .tableMap {
+    width: 100%;
+  }
+
+  .tableMap img {
+    width: clamp(88px, 28vw, 130px);
+    height: auto;
+  }
+
+  .tableActions {
+    width: 100%;
+  }
+
+  .tableJoin,
+  .tableCopy {
+    flex: 1 1 0;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .tableTags {
+    width: 100%;
+    max-width: none;
+  }
+
+  .configDetails {
+    width: 100%;
+  }
+
+  .configDetails summary {
+    width: 100%;
+  }
+
+  .configDetails pre {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    max-width: 100%;
+    margin-top: 8px;
+  }
+
+
+  /* Mobile labels */
+
+  .lobbyTable tbody td:nth-child(3)::before {
+    content: "Game ID";
+  }
+
+  .lobbyTable tbody td:nth-child(4)::before {
+    content: "Type";
+  }
+
+  .lobbyTable tbody td:nth-child(5)::before {
+    content: "Players";
+  }
+
+  .lobbyTable tbody td:nth-child(6)::before {
+    content: "Team size";
+  }
+
+  .lobbyTable tbody td:nth-child(7)::before {
+    content: "Starts";
+  }
+
+  .lobbyTable tbody td:nth-child(8)::before {
+    content: "Modifiers";
+  }
+
+  .lobbyTable tbody td:nth-child(n + 3)::before {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--faint);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+}
+
+
+/* Very narrow phones */
+
+@media (max-width: 480px) {
+  .lobbyTable tbody tr {
+    grid-template-columns: 1fr;
+  }
+
+  .lobbyTable tbody td {
+    grid-column: 1 / -1;
+  }
+
+  .tableMap img {
+    width: 92px;
+  }
+
+  .brandLogo img {
+    width: 145px;
+  }
+
+  .headerActions {
+    flex-wrap: wrap;
+  }
+
+  .headerActions button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
 }

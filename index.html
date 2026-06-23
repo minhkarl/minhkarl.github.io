@@ -18,9 +18,9 @@
         </a>
 
         <div class="headerActions">
-          <button id="toggleFilters" class="filtersToggle" type="button">Filters</button>
-          <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
+          <button id="toggleFilters" class="filtersToggle" type="button">Filters</button>          
           <button id="viewToggle" class="viewToggle" type="button">Detailed table</button>
+          <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
         </div>
 
         <div class="counts">
@@ -110,6 +110,7 @@
                 <option value="w1">w1</option>
                 <option value="w2">w2</option>
                 <option value="w3">w3</option>
+                <option value="w4">w4</option>
               </select>
               <div class="csel" data-select="worker"></div>
             </div>
@@ -174,7 +175,7 @@
         </div>
 
         <div class="filterGroup">
-          <div class="groupLabel">Modifiers</div>
+          <div class="groupLabel">Modifier logic</div>
           <div class="modsRow" id="modFilters"></div>
         </div>
       </div>
@@ -186,29 +187,13 @@
         </div>
       </div>
       <div id="tableView" class="tableView">
-        <div class="tableScroll">
-          <table class="lobbyTable">
-            <thead>
-              <tr>
-                <th>Join</th>
-                <th>Map / Mode</th>
-                <th>Game ID</th>
-                <th>Type</th>
-                <th>Players</th>
-                <th>Team size</th>
-                <th>Starts</th>
-                <th>Modifiers</th>
-                <th>Configuration</th>
-              </tr>
-            </thead>
-      
-            <tbody id="tableRows">
-              <tr>
-                <td colspan="9" class="mono">Waiting for data…</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <table class="lobbyTable">
+          <tbody id="tableRows">
+            <tr>
+              <td colspan="9" class="mono">Waiting for data…</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -229,7 +214,7 @@
         return `https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/maps/${slug}/thumbnail.webp`;
       }
       
-      const TRI = { ANY: "any", YES: "yes", NO: "no" };
+      const TRI = { NONE: "none", OR: "or", AND: "and", NOT: "not" };
       const $ = (id) => document.getElementById(id);
       
       function escapeHtml(s) {
@@ -581,14 +566,17 @@
         audioCtx: null,
         renderScheduled: false,
         lastStructSig: "",
-        pendingStructure: null,
-        cardsHoverHold: false,
         filtersOpenTimer: null,
 
         reconnectTimer: null,
         staleTimer: null,
+        connectTimeout: null,
+        snapshotTimer: null,
         lastMessageAt: 0,
+        lastDataAt: 0,
+        lastFullMessageAt: 0,
         reconnectAttempts: 0,
+        unknownCountFrames: 0,
         manualDisconnect: false,
 
         view:
@@ -703,7 +691,11 @@
           maxMaxPlayers: value.maxMaxPlayers ?? null,
           minPerTeam: value.minPerTeam ?? null,
           maxPerTeam: value.maxPerTeam ?? null,
-          tri: Array.isArray(value.tri) ? value.tri : [],
+          tri: Array.isArray(value.tri)
+            ? value.tri
+                .filter((entry) => Array.isArray(entry) && entry.length >= 2 && entry[0])
+                .map(([id, rule]) => [id, normalizeModifierRule(rule)])
+            : [],
         };
       }
 
@@ -749,7 +741,7 @@
 
           initTriState();
           for (const [id, value] of filters.tri) {
-            if ([TRI.ANY, TRI.YES, TRI.NO].includes(value)) state.tri.set(id, value);
+            state.tri.set(id, normalizeModifierRule(value));
           }
           renderModFiltersUI();
 
@@ -853,6 +845,23 @@
         if (!gameID) return "about:blank";
         return `https://openfront.io/game/${encodeURIComponent(gameID)}`;
       }
+
+      async function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+
+        const input = document.createElement("textarea");
+        input.value = text;
+        input.setAttribute("readonly", "");
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
       
       function wireActionLinks() {
         // The whole card is the join button.
@@ -870,16 +879,31 @@
           openCard(e);
         });
 
-        const canHover = !window.matchMedia || window.matchMedia("(hover: hover)").matches;
-        if (canHover) {
-          els.cardGrid.addEventListener("pointerenter", () => {
-            state.cardsHoverHold = true;
-          });
-          els.cardGrid.addEventListener("pointerleave", () => {
-            state.cardsHoverHold = false;
-            flushPendingCards();
-          });
-        }
+        els.tableRows.addEventListener("click", async (e) => {
+          const button = e.target.closest("[data-copy-link]");
+          if (!button) return;
+
+          const row = button.closest("tr[data-game-id]");
+          const joinLink = row?.querySelector("[data-table-join]");
+          const link = joinLink?.href;
+          if (!link) return;
+
+          const originalText = button.textContent;
+
+          try {
+            await copyText(link);
+            button.textContent = "Copied";
+            button.classList.add("copied");
+          } catch {
+            button.textContent = "Failed";
+          }
+
+          setTimeout(() => {
+            button.textContent = originalText;
+            button.classList.remove("copied");
+          }, 1400);
+        });
+
       }
       
       function getCfg(g) { return g?.cfg || g?.gameConfig || null; }
@@ -910,55 +934,68 @@
         return null;
       }
       
+      function normalizeModifierRule(value) {
+        if (value === TRI.OR || value === "in") return TRI.OR;
+        if (value === TRI.AND || value === "need" || value === "yes") return TRI.AND;
+        if (value === TRI.NOT || value === "out" || value === "no") return TRI.NOT;
+        return TRI.NONE;
+      }
+
       function initTriState() {
         state.tri.clear();
-        for (const f of boolFilters) state.tri.set(f.id, TRI.ANY);
-        for (const n of numExact) state.tri.set(n.id, TRI.ANY);
+        for (const f of boolFilters) state.tri.set(f.id, TRI.NONE);
+        for (const n of numExact) state.tri.set(n.id, TRI.NONE);
       }
       
       function setTri(id, value) {
         leaveProfileModeOnManualChange();
-        state.tri.set(id, value);
+
+        const current = normalizeModifierRule(state.tri.get(id));
+        const next = current === value ? TRI.NONE : value;
+        state.tri.set(id, next);
+
         document.querySelectorAll(`[data-tri="${CSS.escape(id)}"]`).forEach((btn) => {
-          btn.classList.toggle("active", btn.getAttribute("data-val") === value);
+          btn.classList.toggle("active", next !== TRI.NONE && btn.getAttribute("data-val") === next);
         });
+
         resetAlertBaseline();
         scheduleRender();
       }
       
       function triButtonGroup(id) {
-        const cur = state.tri.get(id) || TRI.ANY;
-        const mkBtn = (val, text) =>
-          `<button type="button" class="triBtn ${cur === val ? "active" : ""}" data-tri="${escapeHtml(id)}" data-val="${escapeHtml(val)}">${escapeHtml(text)}</button>`;
+        const current = normalizeModifierRule(state.tri.get(id));
+        const makeButton = (value, text, title) =>
+          `<button type="button" class="triBtn ${current === value ? "active" : ""}" data-tri="${escapeHtml(id)}" data-val="${escapeHtml(value)}" title="${escapeHtml(title)}" aria-pressed="${current === value ? "true" : "false"}">${escapeHtml(text)}</button>`;
 
         return `<div class="triBtns">
-          ${mkBtn(TRI.ANY, "Any")}
-          ${mkBtn(TRI.YES, "Yes")}
-          ${mkBtn(TRI.NO, "No")}
+          ${makeButton(TRI.OR, "OR", "Match if at least one selected OR modifier is present")}
+          ${makeButton(TRI.AND, "AND", "Require every selected AND modifier")}
+          ${makeButton(TRI.NOT, "NOT", "Exclude lobbies containing this modifier")}
         </div>`;
       }
 
-      // Yes = the lobby must have the modifier (all "Yes" modifiers required).
-      // No  = exclude any lobby that has the modifier. Any = ignore.
       function matchModifierFilters(g, triState = state.tri) {
         const entries = [
           ...boolFilters.map((bf) => [bf.id, bf.get(g.raw) === true]),
           ...numExact.map((nf) => [nf.id, getNumber(g.raw, nf.key) === nf.exact]),
         ];
 
-        let hasYes = false;
-        let allYesMatched = true;
+        let hasOrRule = false;
+        let matchedOrRule = false;
 
         for (const [id, matched] of entries) {
-          const tri = triState.get(id) || TRI.ANY;
-          if (tri === TRI.NO && matched) return false;
-          if (tri === TRI.YES) {
-            hasYes = true;
-            if (!matched) allYesMatched = false;
+          const rule = normalizeModifierRule(triState.get(id));
+
+          if (rule === TRI.NOT && matched) return false;
+          if (rule === TRI.AND && !matched) return false;
+
+          if (rule === TRI.OR) {
+            hasOrRule = true;
+            if (matched) matchedOrRule = true;
           }
         }
 
-        return hasYes ? allYesMatched : true;
+        return !hasOrRule || matchedOrRule;
       }
       function renderModFiltersUI() {
         const first = new Set(["isCompact", "isCrowded", "randomSpawn"]);
@@ -1298,16 +1335,6 @@
       }
 
       function applyStructure(buckets, serverTime, sig) {
-        // While the pointer is over the grid, don't restructure it: moving a card
-        // out from under the cursor mid-hover is jarring. Stash the latest data and
-        // apply it once the pointer leaves. lastStructSig stays untouched so the
-        // deferred change still reads as pending on the next render.
-        if (state.cardsHoverHold) {
-          state.pendingStructure = { buckets, serverTime, sig };
-          return;
-        }
-        state.pendingStructure = null;
-
         ensureColumns();
 
         // FIRST: where does every surviving card sit before we reorder?
@@ -1365,20 +1392,24 @@
         }
       }
 
-      function flushPendingCards() {
-        if (!state.pendingStructure) return;
-        const { buckets, serverTime, sig } = state.pendingStructure;
-        state.pendingStructure = null;
-        applyStructure(buckets, serverTime, sig);
-      }
-      
       function scheduleRender() {
         if (state.renderScheduled) return;
+
         state.renderScheduled = true;
-        requestAnimationFrame(() => {
+
+        const run = () => {
           state.renderScheduled = false;
-          render();
-        });
+          try {
+            render();
+          } catch (error) {
+            console.error("Render failed:", error);
+          }
+        };
+
+        // requestAnimationFrame can pause in background tabs. Use a timer there
+        // so incoming lobby data still reaches the UI immediately.
+        if (document.hidden) setTimeout(run, 0);
+        else requestAnimationFrame(run);
       }
       
       function handleNewMatchingGames(sortedGames, f) {
@@ -1414,7 +1445,24 @@
         startTitleBlink(newGames.length);
         showDesktopNotification(newGames);
       }
-      
+      function checkAlertsImmediately() {
+        if (!state.payload) return;
+
+        const filters = getFiltersFromUI();
+
+        const matchingGames = flattenGames(state.payload)
+          .filter((game) => matchesCurrentFilters(game, filters));
+
+        const sortedGames = sortGames(
+          matchingGames,
+          filters.sort
+        );
+
+        handleNewMatchingGames(
+          sortedGames,
+          filters
+        );
+      }
       function matchTeamsFilter(g, teamFilters) {
         if (!teamFilters || teamFilters.length === 0) return true;
 
@@ -1538,7 +1586,17 @@
       
         return "Team";
       }
-      
+      function tableTypeText(game) {
+        if (
+          typeof game.teamCount === "number" &&
+          Number.isFinite(game.teamCount) &&
+          game.teamCount > 1
+        ) {
+          return `${game.teamCount} Teams`;
+        }
+
+        return getLobbyType(game);
+      }
       function modeSummaryLine(g) {
         return typeLabelShort(g);
       }
@@ -1675,7 +1733,7 @@
       // chosen sort. Player counts / countdowns changing does NOT change this, so
       // a number-only tick patches in place; adding/removing a game rebuilds.
       function structSignature(buckets, sort) {
-        const ids = (arr) => arr.map((g) => String(g.id || "")).sort().join(",");
+        const ids = (arr) => arr.map((g) => String(g.id || "")).join(",");
         return [sort, ids(buckets.ffa), ids(buckets.team), ids(buckets.special)].join("|");
       }
 
@@ -1715,7 +1773,6 @@
         const filtered = games.filter((g) => matchesCurrentFilters(g, f));
         const sorted = sortGames(filtered, f.sort);
 
-        handleNewMatchingGames(sorted, f);
         if (state.view === "table") {
           renderTable(sorted, serverTime);
           return;
@@ -1736,9 +1793,6 @@
 
         if (sig !== state.lastStructSig || !alreadyBuilt) {
           applyStructure(buckets, serverTime, sig);
-        } else {
-          // Shown structure already matches — drop any defer that's now obsolete.
-          state.pendingStructure = null;
         }
 
         updateLiveFields(sorted, serverTime);
@@ -1753,82 +1807,161 @@
       function clearReconnectTimers() {
         if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
         if (state.staleTimer) clearInterval(state.staleTimer);
+        if (state.connectTimeout) clearTimeout(state.connectTimeout);
+        if (state.snapshotTimer) clearTimeout(state.snapshotTimer);
+
         state.reconnectTimer = null;
         state.staleTimer = null;
+        state.connectTimeout = null;
+        state.snapshotTimer = null;
+      }
+
+      function closeCurrentSocket() {
+        const ws = state.ws;
+        state.ws = null;
+        if (!ws) return;
+
+        // Detach callbacks first so an intentionally closed old socket cannot
+        // schedule another reconnect or overwrite data from the new socket.
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+
+        try { ws.close(); } catch {}
       }
       
-      function scheduleReconnect() {
+      function scheduleReconnect(reason = "Reconnecting") {
         if (state.manualDisconnect) return;
         if (state.reconnectTimer) return;
       
         const attempts = Math.min(state.reconnectAttempts, 8);
-        const delay = Math.min(30000, 1500 * Math.pow(1.8, attempts));
+        const delay = Math.min(30000, 1000 * Math.pow(1.8, attempts));
       
         state.reconnectAttempts += 1;
-        setStatus(`Reconnecting in ${Math.round(delay / 1000)}s…`, "is-connecting");
+        setStatus(`${reason} in ${Math.max(1, Math.round(delay / 1000))}s…`, "is-connecting");
       
         state.reconnectTimer = setTimeout(() => {
           state.reconnectTimer = null;
           connect();
         }, delay);
       }
+
+      function refreshConnection(reason = "Refreshing connection…") {
+        if (state.manualDisconnect) return;
+
+        setStatus(reason, "is-connecting");
+        state.reconnectAttempts = 0;
+        clearReconnectTimers();
+        closeCurrentSocket();
+        connect();
+      }
       
       function startStaleWatch() {
         if (state.staleTimer) clearInterval(state.staleTimer);
       
         state.staleTimer = setInterval(() => {
-          if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+          const ws = state.ws;
+          if (!ws) {
+            scheduleReconnect();
+            return;
+          }
+
+          if (ws.readyState !== WebSocket.OPEN) return;
       
-          const age = Date.now() - (state.lastMessageAt || 0);
+          const freshest = state.lastDataAt || state.lastMessageAt || 0;
+          const age = Date.now() - freshest;
           const staleAfter = 60000;
       
-          if (state.lastMessageAt && age > staleAfter) {
-            try { state.ws.close(); } catch {}
-            scheduleReconnect();
+          if (freshest && age > staleAfter) {
+            setStatus("Refreshing stale connection…", "is-connecting");
+            try { ws.close(); } catch {
+              if (state.ws === ws) state.ws = null;
+              scheduleReconnect();
+            }
           }
-        }, 10000);
+        }, 5000);
       }
       
       function cleanupWs() {
         clearReconnectTimers();
-        if (!state.ws) return;
-        try { state.ws.close(); } catch {}
-        state.ws = null;
+        closeCurrentSocket();
+      }
+
+      function requestSnapshotResync(reason) {
+        const ws = state.ws;
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        setStatus(reason, "is-connecting");
+        try { ws.close(); } catch {
+          if (state.ws === ws) state.ws = null;
+          scheduleReconnect("Resyncing");
+        }
       }
       
-      // The lobby socket speaks two dialects, and we support both:
-      //   • Legacy: every frame is the full state — { serverTime, games:{…} } —
-      //     with no "type" field.
-      //   • Delta:  a { type:"full", serverTime, games:{…} } snapshot on connect
-      //     and whenever the set of lobbies changes, then frequent
-      //     { type:"counts", serverTime, counts:{ gameID: numClients } } frames
-      //     that only refresh player counts.
-      // Returns true when the in-memory payload changed and a render is warranted.
+      // The lobby socket speaks two dialects:
+      //   • Full snapshots contain { serverTime, games:{…} }
+      //   • Count updates contain { type:"counts", counts:{ gameID: number } }
       function applyServerMessage(msg) {
         if (!msg || typeof msg !== "object") return false;
 
-        if (msg.type === "counts" && msg.counts) {
-          // Delta: patch numClients on the games we already hold. Structure (which
-          // lobbies exist) only ever changes via a full snapshot, so unknown ids
-          // here are simply ignored — the next full snapshot will carry them.
+        if (msg.type === "counts" && msg.counts && typeof msg.counts === "object") {
+          // A count frame cannot build the lobby list by itself. If a full snapshot
+          // never arrived, the snapshot timeout below reconnects and requests one.
           if (!state.payload || !state.payload.games) return false;
+
+          const knownIds = new Set();
+
           for (const arr of Object.values(state.payload.games)) {
             if (!Array.isArray(arr)) continue;
-            for (const g of arr) {
-              const id = g && g.gameID;
-              if (id != null && Object.prototype.hasOwnProperty.call(msg.counts, id)) {
-                g.numClients = msg.counts[id];
+
+            for (const game of arr) {
+              const id = game?.gameID;
+              if (id == null) continue;
+
+              const key = String(id);
+              knownIds.add(key);
+
+              if (Object.prototype.hasOwnProperty.call(msg.counts, key)) {
+                game.numClients = msg.counts[key];
               }
             }
           }
-          if (typeof msg.serverTime === "number") state.payload.serverTime = msg.serverTime;
+
+          const hasUnknownIds = Object.keys(msg.counts)
+            .some((id) => !knownIds.has(String(id)));
+
+          if (hasUnknownIds) {
+            state.unknownCountFrames += 1;
+
+            // Two consecutive out-of-sync frames means this client is missing a
+            // newer full snapshot. Reconnect instead of staying stale forever.
+            if (state.unknownCountFrames >= 2) {
+              state.unknownCountFrames = 0;
+              setTimeout(() => requestSnapshotResync("Resyncing lobby list…"), 0);
+            }
+          } else {
+            state.unknownCountFrames = 0;
+          }
+
+          if (typeof msg.serverTime === "number") {
+            state.payload.serverTime = msg.serverTime;
+          }
+
           return true;
         }
 
-        // Full snapshot — legacy (no type) or { type:"full" }. Guard on `games` so
-        // an unexpected frame can't blow the current lobby list away.
+        // Full snapshot — legacy (no type) or { type:"full" }.
         if (msg.games && typeof msg.games === "object") {
           state.payload = msg;
+          state.lastFullMessageAt = Date.now();
+          state.unknownCountFrames = 0;
+
+          if (state.snapshotTimer) {
+            clearTimeout(state.snapshotTimer);
+            state.snapshotTimer = null;
+          }
+
           return true;
         }
 
@@ -1837,41 +1970,113 @@
 
       function connect() {
         clearReconnectTimers();
+        closeCurrentSocket();
 
         const worker = els.worker.value || "w0";
         const url = `wss://openfront.io/${worker}/lobbies`;
+        const openedForThisConnectionAt = Date.now();
+
         setStatus("Connecting…", "is-connecting");
       
         const ws = new WebSocket(url);
         state.ws = ws;
         state.manualDisconnect = false;
+        state.lastMessageAt = 0;
+        state.lastDataAt = 0;
+        state.unknownCountFrames = 0;
+
+        state.connectTimeout = setTimeout(() => {
+          if (state.ws !== ws || ws.readyState === WebSocket.OPEN) return;
+
+          setStatus("Connection timed out", "is-offline");
+          try { ws.close(); } catch {
+            if (state.ws === ws) state.ws = null;
+            scheduleReconnect();
+          }
+        }, 12000);
       
         ws.onopen = () => {
+          if (state.ws !== ws) return;
+
+          if (state.connectTimeout) {
+            clearTimeout(state.connectTimeout);
+            state.connectTimeout = null;
+          }
+
           state.reconnectAttempts = 0;
           state.lastMessageAt = Date.now();
           setStatus("Live", "is-live");
           startStaleWatch();
+
+          // Receiving count frames without a full snapshot leaves the page unable
+          // to know which games exist. Force a clean reconnect if that happens.
+          state.snapshotTimer = setTimeout(() => {
+            if (state.ws !== ws) return;
+            if (state.lastFullMessageAt >= openedForThisConnectionAt) return;
+            requestSnapshotResync("Waiting for lobby list…");
+          }, 12000);
         };
       
         ws.onclose = () => {
+          if (state.ws !== ws) return;
+
+          clearReconnectTimers();
+          state.ws = null;
+
           if (state.manualDisconnect) return;
           setStatus("Disconnected", "is-offline");
           scheduleReconnect();
         };
 
         ws.onerror = () => {
-          if (state.manualDisconnect) return;
+          if (state.ws !== ws || state.manualDisconnect) return;
+
           setStatus("Connection error", "is-offline");
-          scheduleReconnect();
+
+          // Closing funnels recovery through onclose and prevents a second live
+          // socket from being opened while this broken one still exists.
+          try { ws.close(); } catch {
+            if (state.ws === ws) state.ws = null;
+            scheduleReconnect();
+          }
         };
       
-        ws.onmessage = (ev) => {
+        ws.onmessage = (event) => {
+          if (state.ws !== ws) return;
+
+          let message;
           try {
-            state.lastMessageAt = Date.now();
-            if (applyServerMessage(JSON.parse(ev.data))) scheduleRender();
-          } catch {}
+            message = JSON.parse(event.data);
+          } catch (error) {
+            console.warn("Ignored invalid WebSocket message:", error);
+            return;
+          }
+
+          state.lastMessageAt = Date.now();
+
+          let changed = false;
+          try {
+            changed = applyServerMessage(message);
+          } catch (error) {
+            console.error("Failed to apply lobby update:", error);
+          }
+
+          if (!changed) return;
+
+          state.lastDataAt = Date.now();
+
+          // Always schedule the UI first. Alert code failing must never prevent
+          // the lobby list from updating.
+          scheduleRender();
+
+          try {
+            checkAlertsImmediately();
+          } catch (error) {
+            console.error("Alert check failed:", error);
+          }
         };
       }
+
       function setLobbyView(view) {
         state.view = view === "table" ? "table" : "cards";
 
@@ -1905,7 +2110,7 @@
         const modifiers = gameModifierLabels(game);
 
         if (!modifiers.length) {
-          return `<span class="tableTag">Default</span>`;
+          return "";
         }
 
         return modifiers
@@ -1932,19 +2137,33 @@
         const startsRaw = game.startsAt
           ? String(game.startsAt)
           : "—";
+        const isNewMatchFlash = state.flashIds.has(gameID);
 
         return `
-          <tr data-game-id="${escapeHtml(gameID)}">
+          <tr
+            class="${isNewMatchFlash ? "newMatchFlash" : ""}"
+            data-game-id="${escapeHtml(gameID)}"
+          >
             <td>
-              <a
-                class="tableJoin"
-                data-table-join
-                href="${escapeHtml(joinUrl)}"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Join
-              </a>
+              <div class="tableActions">
+                <a
+                  class="tableJoin"
+                  data-table-join
+                  href="${escapeHtml(joinUrl)}"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Join
+                </a>
+                <button
+                  class="tableCopy"
+                  type="button"
+                  data-copy-link
+                  aria-label="Copy lobby link"
+                >
+                  Copy
+                </button>
+              </div>
             </td>
 
             <td>
@@ -1986,7 +2205,7 @@
               class="mono"
               data-table-type
             >
-              ${escapeHtml(getLobbyType(game))}
+              ${escapeHtml(tableTypeText(game))}
             </td>
 
             <td
@@ -2026,7 +2245,7 @@
             </td>
 
             <td>
-              <details class="configDetails">
+              <details class="configDetails" name="lobby-config">
                 <summary>View config</summary>
 
                 <pre data-table-config>${escapeHtml(
@@ -2064,6 +2283,7 @@
         const joinUrl = getJoinUrl(gameID);
 
         row.dataset.gameId = gameID;
+        row.classList.toggle("newMatchFlash", state.flashIds.has(gameID));
 
         const joinLink = row.querySelector("[data-table-join]");
 
@@ -2148,8 +2368,8 @@
 
         setTableText(
           row,
-          "[data-table-config]",
-          tableConfigText(game)
+          "[data-table-type]",
+          tableTypeText(game)
         );
       }
 
@@ -2254,6 +2474,10 @@
         els.worker.addEventListener("change", () => {
           state.manualDisconnect = true;
           cleanupWs();
+
+          state.payload = null;
+          state.lastFullMessageAt = 0;
+          state.lastStructSig = "";
           state.alertBaselineReady = false;
           state.alertPrevIds = new Set();
       
@@ -2324,6 +2548,32 @@
         });
       }
       
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) return;
+
+        const ws = state.ws;
+        const freshest = state.lastDataAt || state.lastMessageAt || 0;
+        const age = freshest ? Date.now() - freshest : Infinity;
+
+        if (!ws || ws.readyState !== WebSocket.OPEN || age > 30000) {
+          refreshConnection("Refreshing after inactivity…");
+        } else {
+          scheduleRender();
+        }
+      });
+
+      window.addEventListener("online", () => {
+        refreshConnection("Back online…");
+      });
+
+      window.addEventListener("offline", () => {
+        setStatus("Offline", "is-offline");
+      });
+
+      window.addEventListener("pageshow", (event) => {
+        if (event.persisted) refreshConnection("Refreshing restored page…");
+      });
+
       initCustomSelects();
       initTriState();
 
