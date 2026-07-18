@@ -103,17 +103,6 @@
               <div class="csel" data-select="sort"></div>
             </div>
 
-            <div>
-              <label for="worker">Server</label>
-              <select id="worker" hidden>
-                <option value="w0" selected>w0</option>
-                <option value="w1">w1</option>
-                <option value="w2">w2</option>
-                <option value="w3">w3</option>
-                <option value="w4">w4</option>
-              </select>
-              <div class="csel" data-select="worker"></div>
-            </div>
           </div>
         </div>
 
@@ -512,9 +501,13 @@
         });
       }
       
+      // Each visitor gets a random lobby worker so load spreads across the
+      // five /lobbies sockets. Fixed for the life of the page.
+      const WORKER_POOL = ["w0", "w1", "w2", "w3", "w4"];
+      const WORKER = WORKER_POOL[Math.floor(Math.random() * WORKER_POOL.length)];
+
       const els = {
         status: $("status"),
-        worker: $("worker"),
         type: $("type"),
         teamsFilter: $("teamsFilter"),
         hideEmpty: $("hideEmpty"),
@@ -660,7 +653,6 @@
       function getProfileSnapshot() {
         const filters = getFiltersFromUI();
         return {
-          worker: els.worker.value,
           type: filters.type,
           hideEmpty: filters.hideEmpty,
           teamFilters: filters.teamFilters,
@@ -679,7 +671,6 @@
       function normalizeProfileFilters(filters) {
         const value = filters || {};
         return {
-          worker: value.worker || "w0",
           type: value.type || "all",
           hideEmpty: value.hideEmpty === true,
           teamFilters: Array.isArray(value.teamFilters) ? value.teamFilters.filter((item) => item && item !== "any") : [],
@@ -718,12 +709,9 @@
       function applyProfileSnapshot(rawFilters) {
         if (!rawFilters) return;
         const filters = normalizeProfileFilters(rawFilters);
-        const nextWorker = filters.worker;
-        const workerChanged = els.worker.value !== nextWorker;
 
         state.applyingProfile = true;
         try {
-          els.worker.value = nextWorker;
           els.type.value = filters.type;
           els.hideEmpty.value = filters.hideEmpty ? "yes" : "no";
           els.sort.value = filters.sort;
@@ -758,8 +746,6 @@
             els.minPerTeam,
             els.maxPerTeam,
           ].forEach(dispatchChange);
-
-          if (workerChanged) dispatchChange(els.worker);
         } finally {
           state.applyingProfile = false;
         }
@@ -1972,8 +1958,7 @@
         clearReconnectTimers();
         closeCurrentSocket();
 
-        const worker = els.worker.value || "w0";
-        const url = `wss://openfront.io/${worker}/lobbies`;
+        const url = `wss://openfront.io/${WORKER}/lobbies`;
         const openedForThisConnectionAt = Date.now();
 
         setStatus("Connecting…", "is-connecting");
@@ -2470,22 +2455,6 @@
       
         els.sort.addEventListener("input", rerender);
         els.sort.addEventListener("change", rerender);
-      
-        els.worker.addEventListener("change", () => {
-          state.manualDisconnect = true;
-          cleanupWs();
-
-          state.payload = null;
-          state.lastFullMessageAt = 0;
-          state.lastStructSig = "";
-          state.alertBaselineReady = false;
-          state.alertPrevIds = new Set();
-      
-          setTimeout(() => {
-            state.manualDisconnect = false;
-            connect();
-          }, 100);
-        });
       
         els.alertToggle.addEventListener("click", () => {
           setAlertsEnabled(!state.alertsEnabled);
