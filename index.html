@@ -186,6 +186,7 @@
       </div>
     </div>
 
+    <script src="lobby-wire.js"></script>
     <script>
       document.body.classList.add("card-view");
 
@@ -1964,6 +1965,8 @@
         setStatus("Connecting…", "is-connecting");
       
         const ws = new WebSocket(url);
+        // The game now sends zbin binary frames (see lobby-wire.js).
+        ws.binaryType = "arraybuffer";
         state.ws = ws;
         state.manualDisconnect = false;
         state.lastMessageAt = 0;
@@ -2031,7 +2034,12 @@
 
           let message;
           try {
-            message = JSON.parse(event.data);
+            // Binary frames are the game's custom zbin format; keep the JSON
+            // path as a fallback for older servers or a format rollback.
+            message =
+              event.data instanceof ArrayBuffer
+                ? OpenFrontWire.decodeLobbyMessage(new Uint8Array(event.data))
+                : JSON.parse(event.data);
           } catch (error) {
             console.warn("Ignored invalid WebSocket message:", error);
             return;
