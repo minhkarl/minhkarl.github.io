@@ -191,6 +191,80 @@
       </div>
     </div>
 
+    <div id="extensionPromo" class="extensionPromo" hidden>
+      <button id="extensionPromoClose" class="extensionPromoClose" type="button" aria-label="Dismiss">×</button>
+      <div class="extensionPromoTitle">🧩 New: Lobby Overlay extension</div>
+      <div class="extensionPromoBody">
+        Bring these lobby cards straight into openfront.io's own lobby picker — no more tab-switching to join a game.
+      </div>
+      <button id="extensionPromoToggle" class="extensionPromoToggle" type="button" aria-expanded="false">
+        How do I get it?
+      </button>
+      <ol id="extensionPromoSteps" class="extensionPromoSteps" hidden>
+        <li>
+          Install a userscript manager —
+          <a href="https://www.tampermonkey.net/" target="_blank" rel="noreferrer">Tampermonkey</a>
+          (Chrome, Edge, Firefox, Safari).
+        </li>
+        <li>
+          <a
+            id="extensionPromoInstallLink"
+            href="https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js"
+            target="_blank"
+            rel="noreferrer"
+          >Click here to install the overlay script</a>
+          — Tampermonkey will pop up an install prompt automatically.
+        </li>
+        <li>Click "Install" in that Tampermonkey tab.</li>
+        <li>Open <a href="https://openfront.io/" target="_blank" rel="noreferrer">openfront.io</a> — the lobby picker is replaced automatically.</li>
+      </ol>
+      <div class="extensionPromoActions">
+        <a
+          class="extensionPromoInstallBtn"
+          href="https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js"
+          target="_blank"
+          rel="noreferrer"
+        >Install extension</a>
+      </div>
+    </div>
+
+    <script>
+      (() => {
+        const PROMO_VERSION = "1"; // bump to re-show after dismissal for a future announcement
+        const DISMISS_KEY = "ofExtensionPromoDismissed";
+
+        const promo = document.getElementById("extensionPromo");
+        const closeBtn = document.getElementById("extensionPromoClose");
+        const toggleBtn = document.getElementById("extensionPromoToggle");
+        const steps = document.getElementById("extensionPromoSteps");
+        if (!promo || !closeBtn || !toggleBtn || !steps) return;
+
+        let dismissedVersion = null;
+        try {
+          dismissedVersion = localStorage.getItem(DISMISS_KEY);
+        } catch (_) {}
+
+        if (dismissedVersion === PROMO_VERSION) return;
+
+        setTimeout(() => {
+          promo.hidden = false;
+        }, 1200);
+
+        closeBtn.addEventListener("click", () => {
+          promo.hidden = true;
+          try {
+            localStorage.setItem(DISMISS_KEY, PROMO_VERSION);
+          } catch (_) {}
+        });
+
+        toggleBtn.addEventListener("click", () => {
+          const expanded = toggleBtn.getAttribute("aria-expanded") === "true";
+          toggleBtn.setAttribute("aria-expanded", String(!expanded));
+          steps.hidden = expanded;
+        });
+      })();
+    </script>
+
     <script src="lobby-wire.js"></script>
     <script src="modifier-labels.js"></script>
     <script>
