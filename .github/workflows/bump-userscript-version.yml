@@ -1,0 +1,52 @@
+name: Bump userscript version
+
+# Tampermonkey only re-fetches openfront-lobby-overlay.user.js's @require'd
+# dependencies (lobby-wire.js, modifier-labels.js) when the userscript's own
+# @version changes — there's no independent refresh schedule for @require
+# content. This keeps that version incrementing automatically whenever the
+# script or any of its dependencies change on main, regardless of what pushed
+# the change (a human edit, the resync-lobby-wire.yml automation, etc.) —
+# without this, a fix could land in the repo and simply never reach anyone
+# who already has the script installed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "openfront-lobby-overlay.user.js"
+      - "lobby-wire.js"
+      - "modifier-labels.js"
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    # Guards against the version-bump commit below re-triggering this workflow.
+    if: "!contains(github.event.head_commit.message, '[skip-version-bump]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump patch version
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = "openfront-lobby-overlay.user.js";
+            const src = fs.readFileSync(path, "utf8");
+            const re = /(\/\/ @version\s+)(\d+)\.(\d+)\.(\d+)/;
+            const m = src.match(re);
+            if (!m) { console.error("no @version line found in " + path); process.exit(1); }
+            const [, prefix, major, minor, patch] = m;
+            const next = major + "." + minor + "." + (Number(patch) + 1);
+            fs.writeFileSync(path, src.replace(re, prefix + next));
+            console.log("Bumped " + path + " to " + next);
+          '
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add openfront-lobby-overlay.user.js
+          git commit -m "chore: bump userscript version [skip-version-bump]"
+          git push

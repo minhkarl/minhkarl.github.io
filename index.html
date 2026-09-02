@@ -192,6 +192,7 @@
     </div>
 
     <script src="lobby-wire.js"></script>
+    <script src="modifier-labels.js"></script>
     <script>
       document.body.classList.add("card-view");
 
@@ -1358,7 +1359,10 @@
         for (const g of games) {
           const id = String(g.id || "");
           let node = id ? existing.get(id) : null;
-          if (node) {
+          // A node can exist under this id but no longer match the current
+          // game's content (a rehosted lobby reusing its code) — only reuse
+          // it as-is when the fingerprint still agrees, otherwise rebuild.
+          if (node && node.dataset.fingerprint === cardFingerprint(g)) {
             keep.add(id);
           } else {
             try {
@@ -1664,65 +1668,12 @@
       
       // All active modifiers for a game as pretty labels. Labels mirror OpenFront's
       // own getActiveModifiers() (src/client/Utils.ts) so they match the in-game
-      // lobby badges. Each flag is read from publicGameModifiers, with a fallback to
-      // the raw gameConfig (map size, disabledUnits, top-level waterNukes) so a tag
-      // still shows however the lobby encodes it. Team format is omitted (the mode
-      // line already conveys it).
+      // lobby badges. Implementation lives in modifier-labels.js, shared with
+      // openfront-lobby-overlay.user.js (loaded there via @require) so the
+      // two can't silently drift out of sync the way lobby-wire.js's
+      // hand-transcribed tables used to before it was resynced.
       function gameModifierLabels(g) {
-        const pm = g.pm || {};
-        const cfg = g.cfg || {};
-        const disabled = Array.isArray(cfg.disabledUnits) ? cfg.disabledUnits : [];
-        const labels = [];
-
-        const startingGold = getNumber(g.raw, "startingGold");
-        if (Number.isFinite(startingGold) && startingGold > 0) labels.push(`${compactNumber(startingGold)} Starting Gold`);
-
-        const goldMultiplier = getNumber(g.raw, "goldMultiplier");
-        if (Number.isFinite(goldMultiplier) && goldMultiplier !== 1) labels.push(`${goldMultiplier}× Gold`);
-
-        if (pm.isRandomSpawn === true || cfg.randomSpawn === true) labels.push("Random Spawn");
-        if (pm.isCompact === true || cfg.gameMapSize === "Compact") labels.push("Compact Map");
-        if (pm.isCrowded === true) labels.push("Crowded");
-        if (pm.isHardNations === true) labels.push("Hard Nations");
-        if (pm.isAlliancesDisabled === true || cfg.disableAlliances === true) labels.push("Alliances Disabled");
-        if (pm.isPortsDisabled === true || disabled.includes("Port")) labels.push("Ports Disabled");
-        if (pm.isNukesDisabled === true || disabled.includes("Atom Bomb")) labels.push("Nukes Disabled");
-        if (pm.isSAMsDisabled === true) labels.push("SAMs Disabled");
-        if (pm.isPeaceTime === true) labels.push("4min Peace");
-        if (pm.isWaterNukes === true || cfg.waterNukes === true) labels.push("Water Nukes");
-        if (pm.isDoomsdayClock === true) {
-          const speedLabels = { slow: "Slow", normal: "Normal", fast: "Fast", veryfast: "Very Fast" };
-          const speed = cfg.doomsdayClock?.speed;
-          labels.push(speed ? `Doomsday Clock (${speedLabels[speed] || speed})` : "Doomsday Clock");
-        }
-        if (pm.isOvertime === true) {
-          const startMinutes = cfg.overtime?.startMinutes;
-          labels.push(Number.isFinite(startMinutes) ? `Overtime (${startMinutes}m)` : "Overtime");
-        }
-        if (cfg.rankedType) labels.push(`Ranked ${cfg.rankedType}`);
-
-        if (typeof cfg.nations === "number") labels.push(`${cfg.nations} Nations`);
-        else if (cfg.nations === "disabled") labels.push("Nations Disabled");
-
-        const hc = cfg.hostCheats;
-        if (hc && (hc.infiniteGold === true || hc.infiniteTroops === true || hc.goldMultiplier != null || hc.startingGold != null)) {
-          labels.push("Host Cheats");
-        }
-
-        return labels;
-      }
-
-      function compactNumber(value) {
-        if (!Number.isFinite(value)) return null;
-        if (Math.abs(value) >= 1000000) {
-          const n = value / 1000000;
-          return `${Number.isInteger(n) ? n : n.toFixed(1).replace(/\.0$/, "")}M`;
-        }
-        if (Math.abs(value) >= 1000) {
-          const n = value / 1000;
-          return `${Number.isInteger(n) ? n : n.toFixed(1).replace(/\.0$/, "")}K`;
-        }
-        return String(value);
+        return OpenFrontModifierLabels.gameModifierLabels(g?.cfg);
       }
 
       // Measure a badge label's rendered width (uppercase, as drawn) so the stack
@@ -1784,6 +1735,7 @@
             role="link"
             data-game-id="${escapeHtml(gameID)}"
             data-join-url="${escapeHtml(joinUrl)}"
+            data-fingerprint="${cardFingerprint(g)}"
             ${featured?.accent ? `data-accent="${escapeHtml(featured.accent)}"` : ""}
           >
             <div class="gameCardImage">
@@ -1826,11 +1778,34 @@
         return `<div class="colEmpty"><span class="spawnDot"></span>Spawning game…</div>`;
       }
 
-      // Identifies the *structure*: which game IDs are in which column, plus the
-      // chosen sort. Player counts / countdowns changing does NOT change this, so
-      // a number-only tick patches in place; adding/removing a game rebuilds.
+      function hashString(s) {
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+        return (h >>> 0).toString(36);
+      }
+
+      // Content fingerprint of everything a card shows besides the
+      // live-ticking count/countdown (those patch in place separately). A
+      // hosted lobby can keep the same game ID across a rehost while its
+      // map/modifiers change entirely (the host reuses their code for a new
+      // match) — this fingerprint lets both structSignature() and
+      // reconcileColumn() notice that and rebuild the card instead of
+      // leaving it frozen on the first game's details until a page reload.
+      function cardFingerprint(g) {
+        return hashString(
+          [
+            g.id, g.map, g.maxPlayers, g.format, g.raw?.label, g.raw?.accent, g.raw?.featured,
+            JSON.stringify(g.pm || {}), g.cfg?.doomsdayClock?.speed, g.cfg?.overtime?.startMinutes,
+            g.cfg?.rankedType, g.cfg?.nations, JSON.stringify(g.cfg?.hostCheats || null),
+            JSON.stringify(g.cfg?.disabledUnits || []),
+          ].join(":"),
+        );
+      }
+
+      // Identifies the *structure*: which game IDs (+ content fingerprint)
+      // are in which column, plus the chosen sort.
       function structSignature(buckets, sort) {
-        const ids = (arr) => arr.map((g) => String(g.id || "")).join(",");
+        const ids = (arr) => arr.map((g) => `${g.id}:${cardFingerprint(g)}`).join(",");
         return [sort, ids(buckets.ffa), ids(buckets.team), ids(buckets.special), ids(buckets.hosted)].join("|");
       }
 
