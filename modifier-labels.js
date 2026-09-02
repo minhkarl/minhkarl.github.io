@@ -24,22 +24,27 @@
   }
 
   // cfg is a GameConfig object (PublicGameInfo.gameConfig). startingGold and
-  // goldMultiplier are read from publicGameModifiers only, matching
-  // getActiveModifiers() exactly — GameConfig also carries its own top-level
-  // startingGold/goldMultiplier (the hostCheats-adjacent ones), but those
-  // aren't what getActiveModifiers checks, so folding them in here would
-  // disagree with the in-game badges.
+  // goldMultiplier can live in either of two places depending on how the
+  // lobby was created: automated public-queue games (ffa/team/special) set
+  // them on publicGameModifiers, matching getActiveModifiers() exactly — but
+  // player-hosted (Custom) lobbies never populate publicGameModifiers at
+  // all; HostLobbyModal.ts writes these two fields directly on GameConfig's
+  // own top level instead. Checking only publicGameModifiers (as
+  // getActiveModifiers does) silently drops these badges for every hosted
+  // lobby, so fall back to the top-level fields too.
   function gameModifierLabels(cfg) {
     cfg = cfg || {};
     const pm = cfg.publicGameModifiers || {};
     const disabled = Array.isArray(cfg.disabledUnits) ? cfg.disabledUnits : [];
     const labels = [];
 
-    if (Number.isFinite(pm.startingGold) && pm.startingGold > 0) {
-      labels.push(`${compactNumber(pm.startingGold)} Starting Gold`);
+    const startingGold = cfg.startingGold ?? pm.startingGold;
+    if (Number.isFinite(startingGold) && startingGold > 0) {
+      labels.push(`${compactNumber(startingGold)} Starting Gold`);
     }
-    if (Number.isFinite(pm.goldMultiplier) && pm.goldMultiplier !== 1) {
-      labels.push(`${pm.goldMultiplier}× Gold`);
+    const goldMultiplier = cfg.goldMultiplier ?? pm.goldMultiplier;
+    if (Number.isFinite(goldMultiplier) && goldMultiplier !== 1) {
+      labels.push(`${goldMultiplier}× Gold`);
     }
 
     if (pm.isRandomSpawn === true || cfg.randomSpawn === true) labels.push("Random Spawn");
