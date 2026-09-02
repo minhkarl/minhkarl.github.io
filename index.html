@@ -167,6 +167,11 @@
           <div class="groupLabel">Modifier logic</div>
           <div class="modsRow" id="modFilters"></div>
         </div>
+
+        <div class="filterGroup">
+          <div class="groupLabel">Private Lobby</div>
+          <div class="modsRow" id="privateModFilters"></div>
+        </div>
       </div>
       </div>
 
@@ -529,6 +534,7 @@
         profileDelete: $("profileDelete"),
       
         modFilters: $("modFilters"),
+        privateModFilters: $("privateModFilters"),
         serverTime: $("serverTime"),
         cardGrid: $("cardGrid"),
         viewToggle: $("viewToggle"),
@@ -733,6 +739,7 @@
             state.tri.set(id, normalizeModifierRule(value));
           }
           renderModFiltersUI();
+          renderPrivateModFiltersUI();
 
           [
             els.type,
@@ -813,13 +820,54 @@
         { id: "waterNukes", label: "Water Nukes", get: (g) => getAnyTrue(g, [["pm", "isWaterNukes"], ["cfg", "waterNukes"]]) },
         { id: "isPeaceTime", label: "Peace Time", get: (g) => getPmTrue(g, "isPeaceTime") },
         { id: "isHardNations", label: "Hard Nations", get: (g) => getPmTrue(g, "isHardNations") },
+        { id: "nationsDisabled", label: "Nations Disabled", get: (g) => (getCfg(g)?.nations === "disabled" ? true : null) },
+        { id: "isDoomsdayClock", label: "Doomsday Clock", get: (g) => getPmTrue(g, "isDoomsdayClock") },
+        { id: "isOvertime", label: "Overtime", get: (g) => getPmTrue(g, "isOvertime") },
+        { id: "rankedType", label: "Ranked", get: (g) => (getCfg(g)?.rankedType ? true : null) },
       ];
-      
+
       const numExact = [
         { id: "goldMultiplier_eq_2", label: "2× Gold", key: "goldMultiplier", exact: 2 },
         { id: "startingGold_eq_1000000", label: "1M Starting Gold", key: "startingGold", exact: 1000000 },
         { id: "startingGold_eq_5000000", label: "5M Starting Gold", key: "startingGold", exact: 5000000 },
         { id: "startingGold_eq_25000000", label: "25M Starting Gold", key: "startingGold", exact: 25000000 },
+      ];
+
+      // Fields that only ever come from a player-hosted ("Private") lobby's
+      // custom config, not the fixed public matchmaking presets.
+      const OTHER_DISABLABLE_UNITS = [
+        "Transport", "Warship", "Shell", "SAMMissile", "Hydrogen Bomb",
+        "Trade Ship", "Missile Silo", "Defense Post", "SAM Launcher", "City",
+        "MIRV", "MIRV Warhead", "Train", "Factory",
+      ];
+
+      const privateBoolFilters = [
+        {
+          id: "hostCheats",
+          label: "Host Cheats",
+          get: (g) => {
+            const hc = getCfg(g)?.hostCheats;
+            if (!hc) return null;
+            return hc.infiniteGold === true ||
+              hc.infiniteTroops === true ||
+              hc.goldMultiplier != null ||
+              hc.startingGold != null
+              ? true
+              : null;
+          },
+        },
+        { id: "customAllianceDuration", label: "Custom Alliance Duration", get: (g) => (getCfg(g)?.customAllianceDuration != null ? true : null) },
+        { id: "startDelay", label: "Custom Start Delay", get: (g) => (getCfg(g)?.startDelay != null ? true : null) },
+        { id: "spawnImmunityDuration", label: "Custom Spawn Immunity", get: (g) => (getCfg(g)?.spawnImmunityDuration != null ? true : null) },
+        { id: "maxTimerValue", label: "Custom Max Timer", get: (g) => (getCfg(g)?.maxTimerValue != null ? true : null) },
+        ...OTHER_DISABLABLE_UNITS.map((unit) => ({
+          id: `unitDisabled_${unit.replace(/\s+/g, "")}`,
+          label: `${unit} Disabled`,
+          get: (g) => {
+            const disabled = getCfg(g)?.disabledUnits;
+            return Array.isArray(disabled) && disabled.includes(unit) ? true : null;
+          },
+        })),
       ];
       
       function parseNum(v) {
@@ -895,6 +943,15 @@
       
       function getCfg(g) { return g?.cfg || g?.gameConfig || null; }
       function getPm(g) { return g?.pm || g?.gameConfig?.publicGameModifiers || null; }
+
+      // Admin-curated events only (create_game, authenticated admin bot) — a
+      // custom title + one of a closed set of accent colors, set independently
+      // of the lobby's normal map/type.
+      function getFeaturedInfo(g) {
+        const raw = g?.raw;
+        if (!raw || raw.featured !== true) return null;
+        return { label: raw.label || null, accent: raw.accent || null };
+      }
       
       function getPmTrue(g, key) {
         const pm = getPm(g);
@@ -931,6 +988,7 @@
       function initTriState() {
         state.tri.clear();
         for (const f of boolFilters) state.tri.set(f.id, TRI.NONE);
+        for (const f of privateBoolFilters) state.tri.set(f.id, TRI.NONE);
         for (const n of numExact) state.tri.set(n.id, TRI.NONE);
       }
       
@@ -964,6 +1022,7 @@
       function matchModifierFilters(g, triState = state.tri) {
         const entries = [
           ...boolFilters.map((bf) => [bf.id, bf.get(g.raw) === true]),
+          ...privateBoolFilters.map((bf) => [bf.id, bf.get(g.raw) === true]),
           ...numExact.map((nf) => [nf.id, getNumber(g.raw, nf.key) === nf.exact]),
         ];
 
@@ -1003,7 +1062,18 @@
           btn.addEventListener("click", () => setTri(btn.getAttribute("data-tri"), btn.getAttribute("data-val")));
         });
       }
-      
+
+      function renderPrivateModFiltersUI() {
+        const blocks = privateBoolFilters.map(
+          (f) => `<div class="modBox"><div class="modTitle mono">${escapeHtml(f.label)}</div>${triButtonGroup(f.id)}</div>`,
+        );
+
+        els.privateModFilters.innerHTML = blocks.join("");
+        els.privateModFilters.querySelectorAll("button[data-tri][data-val]").forEach((btn) => {
+          btn.addEventListener("click", () => setTri(btn.getAttribute("data-tri"), btn.getAttribute("data-val")));
+        });
+      }
+
       function normalizeGame(g) {
         const cfg = g?.gameConfig || {};
         const pm = cfg.publicGameModifiers || {};
@@ -1419,7 +1489,11 @@
       
         const newGames = sortedGames.filter((g) => {
           const id = String(g.id || "");
-          return id && !state.alertPrevIds.has(id);
+          if (!id || state.alertPrevIds.has(id)) return false;
+          // "hosted" lobbies are player-created private/custom listings, not
+          // matchmaking games — don't alert on them.
+          const type = g.raw?.__rawType || g.raw?.publicGameType;
+          return type !== "hosted";
         });
       
         state.alertPrevIds = currentIds;
@@ -1616,6 +1690,24 @@
         if (pm.isSAMsDisabled === true) labels.push("SAMs Disabled");
         if (pm.isPeaceTime === true) labels.push("4min Peace");
         if (pm.isWaterNukes === true || cfg.waterNukes === true) labels.push("Water Nukes");
+        if (pm.isDoomsdayClock === true) {
+          const speedLabels = { slow: "Slow", normal: "Normal", fast: "Fast", veryfast: "Very Fast" };
+          const speed = cfg.doomsdayClock?.speed;
+          labels.push(speed ? `Doomsday Clock (${speedLabels[speed] || speed})` : "Doomsday Clock");
+        }
+        if (pm.isOvertime === true) {
+          const startMinutes = cfg.overtime?.startMinutes;
+          labels.push(Number.isFinite(startMinutes) ? `Overtime (${startMinutes}m)` : "Overtime");
+        }
+        if (cfg.rankedType) labels.push(`Ranked ${cfg.rankedType}`);
+
+        if (typeof cfg.nations === "number") labels.push(`${cfg.nations} Nations`);
+        else if (cfg.nations === "disabled") labels.push("Nations Disabled");
+
+        const hc = cfg.hostCheats;
+        if (hc && (hc.infiniteGold === true || hc.infiniteTroops === true || hc.goldMultiplier != null || hc.startingGold != null)) {
+          labels.push("Host Cheats");
+        }
 
         return labels;
       }
@@ -1665,9 +1757,13 @@
         const thumbUrl = getMapThumbnailUrl(map);
         const maxPlayers = g.maxPlayers;
         const isNewMatchFlash = state.flashIds.has(String(gameID));
+        const featured = getFeaturedInfo(g);
+        const title = featured?.label ? featured.label : map;
+        const modeLine = featured?.label ? `${map} • ${modeSummaryLine(g)}` : modeSummaryLine(g);
         const badges = cardBadgeLabels(g)
           .map((label) => `<span class="cardBadge">${escapeHtml(label)}</span>`)
           .join("");
+        const featuredBadge = featured ? `<span class="cardBadge featuredBadge">★ Featured</span>` : "";
 
         return `
           <article
@@ -1676,6 +1772,7 @@
             role="link"
             data-game-id="${escapeHtml(gameID)}"
             data-join-url="${escapeHtml(joinUrl)}"
+            ${featured?.accent ? `data-accent="${escapeHtml(featured.accent)}"` : ""}
           >
             <div class="gameCardImage">
               <img
@@ -1685,15 +1782,15 @@
                 decoding="async"
                 onerror="this.onerror=null;this.style.opacity='0';"
               >
-              <div class="cardBadges">${badges}</div>
+              <div class="cardBadges">${featuredBadge}${badges}</div>
               <div class="cardTime">${escapeHtml(formatCardStarts(g, serverTime))}</div>
               <div class="cardPlayers">${escapeHtml(String(g.joined ?? 0))}${maxPlayers !== null ? "/" + escapeHtml(String(maxPlayers)) : ""} 👥</div>
             </div>
             <div class="gameCardInfo">
               <div class="gameCardTop">
                 <div class="gameCardText">
-                  <div class="gameCardTitle">${escapeHtml(map)}</div>
-                  <div class="gameCardMode">${escapeHtml(modeSummaryLine(g))}</div>
+                  <div class="gameCardTitle ${featured?.label ? "gameCardTitleWrap" : ""}">${escapeHtml(title)}</div>
+                  <div class="gameCardMode">${escapeHtml(modeLine)}</div>
                 </div>
                 <div class="cardCode mono">${escapeHtml(gameID)}</div>
               </div>
@@ -1706,6 +1803,7 @@
         { key: "ffa", label: "Free For All" },
         { key: "team", label: "Teams" },
         { key: "special", label: "Special" },
+        { key: "hosted", label: "Private" },
       ];
 
       // Minimum slots shown per column (active game + the next one). Real games
@@ -1721,7 +1819,7 @@
       // a number-only tick patches in place; adding/removing a game rebuilds.
       function structSignature(buckets, sort) {
         const ids = (arr) => arr.map((g) => String(g.id || "")).join(",");
-        return [sort, ids(buckets.ffa), ids(buckets.team), ids(buckets.special)].join("|");
+        return [sort, ids(buckets.ffa), ids(buckets.team), ids(buckets.special), ids(buckets.hosted)].join("|");
       }
 
       // Patch only the volatile bits (countdown + player count) on cards already
@@ -1764,9 +1862,9 @@
           renderTable(sorted, serverTime);
           return;
         }
-        // The socket already groups lobbies into ffa / team / special — keep each
-        // game in the column the server assigned it to.
-        const buckets = { ffa: [], team: [], special: [] };
+        // The socket already groups lobbies into ffa / team / special / hosted —
+        // keep each game in the column the server assigned it to.
+        const buckets = { ffa: [], team: [], special: [], hosted: [] };
         for (const g of sorted) {
           const cat = g.raw?.__rawType || g.raw?.publicGameType;
           if (buckets[cat]) buckets[cat].push(g);
@@ -2131,11 +2229,15 @@
           ? String(game.startsAt)
           : "—";
         const isNewMatchFlash = state.flashIds.has(gameID);
+        const featured = getFeaturedInfo(game);
+        const mapTitle = featured?.label ? featured.label : map;
+        const modeLine = featured?.label ? `${map} • ${modeSummaryLine(game)}` : modeSummaryLine(game);
 
         return `
           <tr
             class="${isNewMatchFlash ? "newMatchFlash" : ""}"
             data-game-id="${escapeHtml(gameID)}"
+            ${featured?.accent ? `data-accent="${escapeHtml(featured.accent)}"` : ""}
           >
             <td>
               <div class="tableActions">
@@ -2174,14 +2276,14 @@
                     class="tableMapName"
                     data-table-map-name
                   >
-                    ${escapeHtml(map)}
+                    ${featured ? "★ " : ""}${escapeHtml(mapTitle)}
                   </div>
 
                   <div
                     class="tableMode"
                     data-table-mode
                   >
-                    ${escapeHtml(modeSummaryLine(game))}
+                    ${escapeHtml(modeLine)}
                   </div>
                 </div>
               </div>
@@ -2274,9 +2376,15 @@
         const map = String(game.map || "Unknown");
         const thumbnail = getMapThumbnailUrl(map);
         const joinUrl = getJoinUrl(gameID);
+        const featured = getFeaturedInfo(game);
+        const mapTitle = featured?.label ? featured.label : map;
+        const modeLine = featured?.label ? `${map} • ${modeSummaryLine(game)}` : modeSummaryLine(game);
 
         row.dataset.gameId = gameID;
         row.classList.toggle("newMatchFlash", state.flashIds.has(gameID));
+
+        if (featured?.accent) row.dataset.accent = featured.accent;
+        else delete row.dataset.accent;
 
         const joinLink = row.querySelector("[data-table-join]");
 
@@ -2304,13 +2412,13 @@
         setTableText(
           row,
           "[data-table-map-name]",
-          map
+          (featured ? "★ " : "") + mapTitle
         );
 
         setTableText(
           row,
           "[data-table-mode]",
-          modeSummaryLine(game)
+          modeLine
         );
 
         setTableText(
@@ -2509,6 +2617,7 @@
 
           initTriState();
           renderModFiltersUI();
+          renderPrivateModFiltersUI();
           resetAlertBaseline();
           scheduleRender();
       
@@ -2566,6 +2675,7 @@
         applyProfileSnapshot(lastSavedProfile.filters);
       } else {
         renderModFiltersUI();
+        renderPrivateModFiltersUI();
       }
 
       wireInputs();
