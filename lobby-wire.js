@@ -25,6 +25,8 @@
 // re-derive the tables below from Schemas.ts / Game.ts / Maps.gen.ts.
 // Unknown enum ordinals (e.g. a newly added map) decode to "unknown#<n>"
 // instead of throwing, so a map addition alone doesn't kill the dashboard.
+//
+// Last synced against openfrontio/OpenFrontIO release v0.33.12.
 (function (global) {
   "use strict";
 
@@ -58,7 +60,7 @@
     "Tourney 2 Teams", "Tourney 3 Teams", "Tourney 4 Teams",
     "Tourney 8 Teams", "Traders Dream", "Two Lakes", "United States",
     "Venice", "Vietnam", "Warship Warship", "World", "World Inverted",
-    "Yangtze River", "Yellow Sea", "Yenisei",
+    "Yellow Sea", "Yenisei",
   ];
 
   // src/core/game/Game.ts
