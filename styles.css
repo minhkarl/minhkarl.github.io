@@ -884,6 +884,11 @@ button:active { transform: translateY(1px); }
 .cardBadge {
   background: rgba(98, 176, 255, 0.92);
   color: #07101b;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .cardBadgeMore {

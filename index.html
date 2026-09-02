@@ -1722,7 +1722,7 @@
         const visibleBadgeLabels = allBadgeLabels.slice(0, MAX_CARD_BADGES);
         const hiddenBadgeLabels = allBadgeLabels.slice(MAX_CARD_BADGES);
         const badges =
-          visibleBadgeLabels.map((label) => `<span class="cardBadge">${escapeHtml(label)}</span>`).join("") +
+          visibleBadgeLabels.map((label) => `<span class="cardBadge" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`).join("") +
           (hiddenBadgeLabels.length
             ? `<span class="cardBadge cardBadgeMore" title="${escapeHtml(hiddenBadgeLabels.join(", "))}">+${hiddenBadgeLabels.length} more</span>`
             : "");

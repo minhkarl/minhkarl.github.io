@@ -123,7 +123,7 @@
     const visibleBadgeLabels = allBadgeLabels.slice(0, MAX_CARD_BADGES);
     const hiddenBadgeLabels = allBadgeLabels.slice(MAX_CARD_BADGES);
     const badges =
-      visibleBadgeLabels.map((l) => `<span class="ofov-badge">${escapeHtml(l)}</span>`).join("") +
+      visibleBadgeLabels.map((l) => `<span class="ofov-badge" title="${escapeHtml(l)}">${escapeHtml(l)}</span>`).join("") +
       (hiddenBadgeLabels.length
         ? `<span class="ofov-badge ofov-badgeMore" title="${escapeHtml(hiddenBadgeLabels.join(", "))}">+${hiddenBadgeLabels.length} more</span>`
         : "");
@@ -313,13 +313,15 @@
         object-fit: cover; object-position: center;
       }
       .ofov-badges {
-        position: absolute; top: 0.5rem; left: 0.5rem;
+        position: absolute; top: 0.5rem; left: 0.5rem; right: 4.5rem;
         display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start;
       }
       .ofov-badge {
         background: #4f9eff; color: #fff; font-size: 0.65rem; font-weight: 700;
         text-transform: uppercase; letter-spacing: 0.05em;
         padding: 0.15rem 0.4rem; border-radius: 0.25rem;
+        max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap; box-sizing: border-box;
       }
       .ofov-featured { background: #facc15; color: #000; }
       .ofov-badgeMore { background: rgba(0,0,0,0.6); color: rgba(255,255,255,0.75); cursor: help; }
