@@ -22,8 +22,35 @@ jobs:
 
       - name: Run resync script
         id: resync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/resync-lobby-wire.mjs
         continue-on-error: true
+
+      - name: Build PR body
+        id: pr_body
+        if: always()
+        run: |
+          {
+            echo "body<<PR_BODY_EOF"
+            echo "Automated enum-table resync against the latest \`openfrontio/OpenFrontIO\`"
+            echo "release tag. Only the mechanically-derived enum arrays (\`GAME_MAP\`,"
+            echo "\`DIFFICULTY\`, etc.) are touched — see the workflow run log for the"
+            echo "upstream/local diff that triggered this."
+            echo ""
+            if [ "${{ steps.resync.outcome }}" = "failure" ]; then
+              echo "> [!WARNING]"
+              echo "> This same run also detected **GameConfig-shape drift** that could not"
+              echo "> be auto-fixed (see the failed 'Run resync script' step's log above)."
+              echo "> The enum fix in this PR is still correct and safe to merge on its own,"
+              echo "> but lobby-wire.js remains misaligned until a human re-derives the"
+              echo "> changed schema shape by hand — merging this PR does not resolve that."
+              echo ""
+            fi
+            echo "**Review before merging**: check the diff looks like a plausible"
+            echo "map/enum addition (not a mass reshuffle), then merge."
+            echo "PR_BODY_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Open PR if enum tables changed
         if: always()
@@ -31,20 +58,13 @@ jobs:
         with:
           commit-message: "chore: resync lobby-wire.js enum tables against latest OpenFrontIO release"
           title: "chore: resync lobby-wire.js enum tables"
-          body: |
-            Automated enum-table resync against the latest `openfrontio/OpenFrontIO`
-            release tag. Only the mechanically-derived enum arrays (`GAME_MAP`,
-            `DIFFICULTY`, etc.) are touched — see the workflow run log for the
-            upstream/local diff that triggered this.
-
-            **Review before merging**: check the diff looks like a plausible
-            map/enum addition (not a mass reshuffle), then merge.
+          body: ${{ steps.pr_body.outputs.body }}
           branch: resync/lobby-wire-enums
           delete-branch: true
           add-paths: lobby-wire.js
 
-      - name: Fail loudly on schema-shape drift
+      - name: Fail loudly if the resync script failed
         if: steps.resync.outcome == 'failure'
         run: |
-          echo "::error::resync-lobby-wire.mjs exited non-zero — see the 'Run resync script' step above for the diff. If this is GameConfig-shape drift, re-derive lobby-wire.js's schema definitions by hand against the new Schemas.ts; that part is never auto-written." >&2
+          echo "::error::resync-lobby-wire.mjs exited non-zero — see the 'Run resync script' step above for the actual error. Exit 2 means GameConfig-shape drift: re-derive lobby-wire.js's schema definitions by hand against the new Schemas.ts, that part is never auto-written. Exit 1 means the script couldn't even complete its check (a fetch/network/parse error) — see the traceback in that step's log instead." >&2
           exit 1

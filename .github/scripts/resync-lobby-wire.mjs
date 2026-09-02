@@ -69,6 +69,37 @@ function skipString(src, i) {
   return i + 1;
 }
 
+// A bare "/" is a regex literal, not division, unless the previous
+// non-whitespace character just closed a value (identifier/number/closing
+// bracket) — the standard heuristic real tokenizers use. Schemas.ts already
+// has at least one field-level regex (UsernameSchema); nothing stops one
+// from landing inside GameConfigSchema/PublicGameInfoSchema later, and an
+// unescaped "[" or "]" inside its pattern would otherwise desync depth.
+function isRegexStart(src, i) {
+  let j = i - 1;
+  while (j >= 0 && /\s/.test(src[j])) j--;
+  if (j < 0) return true;
+  return !/[\w$)\]]/.test(src[j]);
+}
+
+// i points at the opening "/". Scans to the matching unescaped "/",
+// treating "[...]" character classes specially (an unescaped "/" inside one
+// doesn't end the regex), then skips trailing flags.
+function skipRegex(src, i) {
+  let j = i + 1;
+  let inClass = false;
+  for (; j < src.length; j++) {
+    const c = src[j];
+    if (c === "\\") { j++; continue; }
+    if (c === "\n") break; // malformed — bail rather than run away
+    if (c === "[") inClass = true;
+    else if (c === "]") inClass = false;
+    else if (c === "/" && !inClass) { j++; break; }
+  }
+  while (j < src.length && /[a-z]/i.test(src[j])) j++;
+  return j;
+}
+
 // Body between (and excluding) the outer `{` `}` of a `<name> = z.object({...})`.
 function extractObjectBody(source, constName) {
   const m = source.match(
@@ -82,6 +113,15 @@ function extractObjectBody(source, constName) {
     const c = source[i];
     if (c === '"' || c === "'") {
       i = skipString(source, i) - 1;
+      continue;
+    }
+    if (c === "/" && source[i + 1] === "/") {
+      const nl = source.indexOf("\n", i);
+      i = (nl === -1 ? source.length : nl) - 1;
+      continue;
+    }
+    if (c === "/" && isRegexStart(source, i)) {
+      i = skipRegex(source, i) - 1;
       continue;
     }
     if ("{([".includes(c)) depth++;
@@ -109,8 +149,17 @@ function parseFields(body) {
     }
     const keyMatch = body.slice(i).match(/^([A-Za-z_$][A-Za-z0-9_$]*)\s*:/);
     if (!keyMatch) {
-      i++;
-      continue;
+      // Silently skipping here would let a field this scanner can't
+      // recognize (a quoted/computed key, spread syntax, ...) vanish from
+      // the extracted shape with no error — exactly the "wrong verdict, no
+      // warning" failure mode this script exists to prevent. Fail loudly
+      // instead: a human re-derives the shape by hand, same as shape drift.
+      throw new Error(
+        `parseFields: couldn't recognize a field key at offset ${i} ` +
+          `(near ${JSON.stringify(body.slice(i, i + 40))}) — the object ` +
+          `literal likely uses a quoted/computed key or spread syntax this ` +
+          `scanner doesn't understand.`,
+      );
     }
     const key = keyMatch[1];
     i += keyMatch[0].length;
@@ -128,6 +177,10 @@ function parseFields(body) {
       if (c === "/" && body[i + 1] === "/") {
         const nl = body.indexOf("\n", i);
         i = (nl === -1 ? body.length : nl) - 1;
+        continue;
+      }
+      if (c === "/" && isRegexStart(body, i)) {
+        i = skipRegex(body, i) - 1;
         continue;
       }
       if ("{([".includes(c)) depth++;
@@ -199,6 +252,14 @@ async function fetchUpstream(tag) {
     rawFile(tag, "src/core/Schemas.ts"),
   ]);
 
+  // Extracted once and reused for both its shape and its nested enum below,
+  // so DOOMSDAY_SPEED is anchored to the "speed:" field specifically within
+  // this schema's own body — not "the first z.enum() found somewhere after
+  // the schema name," which would silently grab the wrong array if the
+  // schema were ever reordered or gained another enum-typed field first.
+  const doomsdayClockBody = extractObjectBody(schemasTs, "DoomsdayClockConfigSchema");
+  if (!doomsdayClockBody) throw new Error("couldn't find DoomsdayClockConfigSchema object body upstream");
+
   const enums = {
     GAME_MAP: parseTsStringEnum(mapsTs, "GameMapType"),
     DIFFICULTY: parseTsStringEnum(gameTs, "Difficulty"),
@@ -209,7 +270,7 @@ async function fetchUpstream(tag) {
     UNIT_TYPE: parseTsStringEnum(gameTs, "UnitType"),
     PUBLIC_GAME_TYPE: parseInlineZodEnum(schemasTs, "export const PublicGameTypeSchema ="),
     LOBBY_ACCENT: parseInlineZodEnum(schemasTs, "export const LobbyAccentSchema ="),
-    DOOMSDAY_SPEED: parseInlineZodEnum(schemasTs, "export const DoomsdayClockConfigSchema ="),
+    DOOMSDAY_SPEED: parseInlineZodEnum(doomsdayClockBody, "speed:"),
     NATIONS_PRESET: parseInlineZodEnum(schemasTs, "nations: zb.union("),
   };
 
@@ -217,7 +278,7 @@ async function fetchUpstream(tag) {
   const gameConfigBody = extractObjectBody(schemasTs, "GameConfigSchema");
   if (!gameConfigBody) throw new Error("couldn't find GameConfigSchema object body upstream");
 
-  const doomsdayShape = shapeOf(parseFields(extractObjectBody(schemasTs, "DoomsdayClockConfigSchema")));
+  const doomsdayShape = shapeOf(parseFields(doomsdayClockBody));
   const overtimeShape = shapeOf(parseFields(extractObjectBody(schemasTs, "OvertimeConfigSchema")));
 
   // Unlike publicGameModifiers/hostCheats (inline z.object({...})), these two
@@ -402,12 +463,25 @@ async function main() {
   if (changedEnums.length > 0) {
     const syncedComment = /Last synced against openfrontio\/OpenFrontIO release .*\./;
     const newComment = `Last synced against openfrontio/OpenFrontIO release ${tag}.`;
-    newSrc = syncedComment.test(newSrc)
-      ? newSrc.replace(syncedComment, newComment)
-      : newSrc.replace(
-          /(instead of throwing, so a map addition alone doesn't kill the dashboard\.\n)/,
-          `$1//\n// ${newComment}\n`,
-        );
+    const fallbackAnchor = /(instead of throwing, so a map addition alone doesn't kill the dashboard\.\n)/;
+
+    if (syncedComment.test(newSrc)) {
+      newSrc = newSrc.replace(syncedComment, newComment);
+    } else if (fallbackAnchor.test(newSrc)) {
+      newSrc = newSrc.replace(fallbackAnchor, `$1//\n// ${newComment}\n`);
+    } else {
+      // .replace() on a non-matching pattern is a silent no-op, not an
+      // error — without this check the enum tables would still get fixed
+      // correctly, but the header comment would go stale with nothing in
+      // the log to say so.
+      console.warn(
+        "\nWarning: couldn't find where to insert the \"Last synced\" " +
+          "comment (neither the existing comment nor its fallback anchor " +
+          "text matched). The enum tables below were still updated " +
+          "correctly — only the header comment is now stale. Update it by hand.",
+      );
+    }
+
     writeFileSync(WIRE_PATH, newSrc);
     console.log(`\nRewrote lobby-wire.js: ${changedEnums.join(", ")}`);
   } else {
