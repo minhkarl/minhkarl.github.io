@@ -1,0 +1,50 @@
+name: Resync lobby-wire.js
+
+on:
+  schedule:
+    # Daily, off the hour — OpenFrontIO ships releases roughly daily.
+    - cron: "17 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  resync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run resync script
+        id: resync
+        run: node .github/scripts/resync-lobby-wire.mjs
+        continue-on-error: true
+
+      - name: Open PR if enum tables changed
+        if: always()
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: resync lobby-wire.js enum tables against latest OpenFrontIO release"
+          title: "chore: resync lobby-wire.js enum tables"
+          body: |
+            Automated enum-table resync against the latest `openfrontio/OpenFrontIO`
+            release tag. Only the mechanically-derived enum arrays (`GAME_MAP`,
+            `DIFFICULTY`, etc.) are touched — see the workflow run log for the
+            upstream/local diff that triggered this.
+
+            **Review before merging**: check the diff looks like a plausible
+            map/enum addition (not a mass reshuffle), then merge.
+          branch: resync/lobby-wire-enums
+          delete-branch: true
+          add-paths: lobby-wire.js
+
+      - name: Fail loudly on schema-shape drift
+        if: steps.resync.outcome == 'failure'
+        run: |
+          echo "::error::resync-lobby-wire.mjs exited non-zero — see the 'Run resync script' step above for the diff. If this is GameConfig-shape drift, re-derive lobby-wire.js's schema definitions by hand against the new Schemas.ts; that part is never auto-written." >&2
+          exit 1
