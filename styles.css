@@ -886,6 +886,12 @@ button:active { transform: translateY(1px); }
   color: #07101b;
 }
 
+.cardBadgeMore {
+  background: rgba(7, 14, 23, 0.82);
+  color: var(--muted);
+  cursor: help;
+}
+
 .featuredBadge {
   background: rgba(251, 191, 36, 0.95);
   color: #241a02;

@@ -1743,6 +1743,13 @@
         return gameModifierLabels(g).sort((a, b) => badgeTextWidth(b) - badgeTextWidth(a));
       }
 
+      // The badge stack is absolutely positioned over a fixed-height image
+      // (.gameCardImage, 190px, overflow:hidden) — past this many, badges were
+      // getting silently clipped with no indication more existed. Cap what's
+      // shown and fold the rest into one "+N more" chip (full list in its
+      // title tooltip) instead.
+      const MAX_CARD_BADGES = 5;
+
       function formatCardStarts(g, serverTime) {
         if (!g.startsAt) return "Open";
         if (!serverTime) return "—";
@@ -1760,9 +1767,14 @@
         const featured = getFeaturedInfo(g);
         const title = featured?.label ? featured.label : map;
         const modeLine = featured?.label ? `${map} • ${modeSummaryLine(g)}` : modeSummaryLine(g);
-        const badges = cardBadgeLabels(g)
-          .map((label) => `<span class="cardBadge">${escapeHtml(label)}</span>`)
-          .join("");
+        const allBadgeLabels = cardBadgeLabels(g);
+        const visibleBadgeLabels = allBadgeLabels.slice(0, MAX_CARD_BADGES);
+        const hiddenBadgeLabels = allBadgeLabels.slice(MAX_CARD_BADGES);
+        const badges =
+          visibleBadgeLabels.map((label) => `<span class="cardBadge">${escapeHtml(label)}</span>`).join("") +
+          (hiddenBadgeLabels.length
+            ? `<span class="cardBadge cardBadgeMore" title="${escapeHtml(hiddenBadgeLabels.join(", "))}">+${hiddenBadgeLabels.length} more</span>`
+            : "");
         const featuredBadge = featured ? `<span class="cardBadge featuredBadge">★ Featured</span>` : "";
 
         return `
