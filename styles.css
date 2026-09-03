@@ -243,6 +243,7 @@ header {
   gap: 12px;
 }
 
+
 .panel {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
@@ -618,7 +619,31 @@ button:active { transform: translateY(1px); }
 .discordGroup {
   display: flex;
   flex: 0 0 auto;
+  align-items: center;
   gap: 8px;
+}
+
+.hitsBadge {
+  display: inline-flex;
+  align-items: center;
+  min-width: 58px;
+  height: 100%;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  background: var(--accent-bg-2);
+  border: 1px solid rgba(98, 176, 255, 0.3);
+  box-shadow: 0 6px 18px rgba(98, 176, 255, 0.15);
+  transition: transform 130ms ease, box-shadow 130ms ease, background 130ms ease;
+}
+
+.hitsBadge:hover {
+  background: rgba(98, 176, 255, 0.28);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(98, 176, 255, 0.25);
+}
+
+.hitsBadge img {
+  display: block;
 }
 
 .discord-btn {

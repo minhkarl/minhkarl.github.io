@@ -453,6 +453,16 @@
     }
   }
 
+  // Same hit counter shown on minhkarl.github.io's header badge — that only
+  // increments when someone loads the dashboard page, so an overlay-only
+  // visitor never counted. Firing the same request here (no display, no
+  // response handling needed) puts both audiences in one number. An <img>
+  // request rather than fetch() avoids any CORS concern, same as how the
+  // badge itself works.
+  function pingVisitCounter() {
+    new Image().src = "https://hits.sh/minhkarl.github.io.svg?style=flat&label=visits&color=62b0ff&labelColor=0d1520";
+  }
+
   let started = false;
 
   function init() {
@@ -466,6 +476,7 @@
     injectStyle();
     mount(gms);
     connect();
+    pingVisitCounter();
     setInterval(tickTimers, 1000);
     setTimeout(() => verifyIntegration(gms), 1000);
   }
