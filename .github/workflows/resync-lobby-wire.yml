@@ -2,8 +2,12 @@ name: Resync lobby-wire.js
 
 on:
   schedule:
-    # Daily, off the hour — OpenFrontIO ships releases roughly daily.
-    - cron: "17 6 * * *"
+    # Hourly — OpenFrontIO ships releases roughly daily, but a shape-drift
+    # release breaks the dashboard the moment it's live, so checking daily
+    # left up to ~24h of undetected breakage. The check itself is a few HTTP
+    # GETs (no build step), so hourly costs nothing on a public repo's free
+    # Actions minutes.
+    - cron: "17 * * * *"
   workflow_dispatch: {}
 
 permissions:

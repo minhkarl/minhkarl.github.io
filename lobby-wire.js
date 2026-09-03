@@ -26,7 +26,7 @@
 // Unknown enum ordinals (e.g. a newly added map) decode to "unknown#<n>"
 // instead of throwing, so a map addition alone doesn't kill the dashboard.
 //
-// Last synced against openfrontio/OpenFrontIO release v0.33.12.
+// Last synced against openfrontio/OpenFrontIO release v0.33.13.
 (function (global) {
   "use strict";
 
@@ -298,7 +298,6 @@
     f("isPeaceTime", "bool", { opt: true }),
     f("isWaterNukes", "bool", { opt: true }),
     f("isDoomsdayClock", "bool", { opt: true }),
-    f("isOvertime", "bool", { opt: true }),
   ]);
 
   const HostCheats = obj([
