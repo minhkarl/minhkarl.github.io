@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OpenFront Lobby Overlay
 // @namespace    https://minhkarl.github.io
-// @version      1.6.9
+// @version      1.6.10
 // @description  Replaces OpenFront's home-screen lobby preview cards with the richer minhkarl.github.io dashboard cards, and removes the JOIN LOBBY button.
 // @match        https://openfront.io/*
 // @run-at       document-idle
