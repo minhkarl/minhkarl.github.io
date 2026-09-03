@@ -897,6 +897,34 @@ button:active { transform: translateY(1px); }
   cursor: help;
 }
 
+.cardModifierOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(7, 14, 23, 0.92);
+  opacity: 0;
+  pointer-events: none;
+  overflow-y: auto;
+  transition: opacity 120ms ease;
+}
+
+.gameCard:hover .cardModifierOverlay,
+.gameCard:focus-within .cardModifierOverlay {
+  opacity: 1;
+}
+
+.cardBadgeFull {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .featuredBadge {
   background: rgba(251, 191, 36, 0.95);
   color: #241a02;

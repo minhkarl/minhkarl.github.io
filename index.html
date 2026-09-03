@@ -1801,10 +1801,15 @@
             ? `<span class="cardBadge cardBadgeMore" title="${escapeHtml(hiddenBadgeLabels.join(", "))}">+${hiddenBadgeLabels.length} more</span>`
             : "");
         const featuredBadge = featured ? `<span class="cardBadge featuredBadge">★ Featured</span>` : "";
-        // Individual badges already carry their own title tooltip, but a
-        // hover anywhere else on the card (the image, the gaps between
-        // badges) showed nothing — put the full list on the card itself too.
-        const cardTooltip = allBadgeLabels.length ? allBadgeLabels.join(", ") : "";
+        // A native title tooltip is invisible/delayed and doesn't help with
+        // badges that are ellipsis-truncated in place (as opposed to the
+        // ones folded into "+N more") — show every modifier as plain
+        // wrapped text over the image on hover instead.
+        const modifierOverlay = allBadgeLabels.length
+          ? `<div class="cardModifierOverlay">${allBadgeLabels
+              .map((label) => `<span class="cardBadge cardBadgeFull">${escapeHtml(label)}</span>`)
+              .join("")}</div>`
+          : "";
 
         return `
           <article
@@ -1815,7 +1820,6 @@
             data-join-url="${escapeHtml(joinUrl)}"
             data-fingerprint="${cardFingerprint(g)}"
             ${featured?.accent ? `data-accent="${escapeHtml(featured.accent)}"` : ""}
-            ${cardTooltip ? `title="${escapeHtml(cardTooltip)}"` : ""}
           >
             <div class="gameCardImage">
               <img
@@ -1828,6 +1832,7 @@
               <div class="cardBadges">${featuredBadge}${badges}</div>
               <div class="cardTime">${escapeHtml(formatCardStarts(g, serverTime))}</div>
               <div class="cardPlayers">${escapeHtml(String(g.joined ?? 0))}${maxPlayers !== null ? "/" + escapeHtml(String(maxPlayers)) : ""} 👥</div>
+              ${modifierOverlay}
             </div>
             <div class="gameCardInfo">
               <div class="gameCardTop">

@@ -137,17 +137,23 @@
     const featuredBadge = lobby.featured ? `<span class="ofov-badge ofov-featured">★ Featured</span>` : "";
     const cardTimeText = timeText(lobby, serverTime);
     const mode = modeSummaryLine(cfg, lobby.numClients);
-    // Individual badges already carry their own title tooltip, but a hover
-    // anywhere else on the card (the image, the gaps between badges) showed
-    // nothing — put the full list on the card itself too.
-    const cardTooltip = allBadgeLabels.length ? allBadgeLabels.join(", ") : "";
+    // A native title tooltip is invisible/delayed and doesn't help with
+    // badges that are ellipsis-truncated in place (as opposed to the ones
+    // folded into "+N more") — show every modifier as plain wrapped text
+    // over the image on hover instead.
+    const modifierOverlay = allBadgeLabels.length
+      ? `<div class="ofov-modifierOverlay">${allBadgeLabels
+          .map((label) => `<span class="ofov-badge ofov-badgeFull">${escapeHtml(label)}</span>`)
+          .join("")}</div>`
+      : "";
     return `
       <article class="ofov-card" data-game-id="${escapeHtml(lobby.gameID)}" data-source="${source}" ${
       lobby.accent ? `data-accent="${escapeHtml(lobby.accent)}"` : ""
-    } ${cardTooltip ? `title="${escapeHtml(cardTooltip)}"` : ""}>
+    }>
         <img class="ofov-img" src="${getMapThumbnailUrl(map)}" alt="${escapeHtml(map)}" loading="lazy"
              onerror="this.style.opacity='0';">
         <div class="ofov-badges">${featuredBadge}${badges}</div>
+        ${modifierOverlay}
         <div class="ofov-time">${escapeHtml(cardTimeText)}</div>
         <div class="ofov-bottom">
           <div class="ofov-title">${escapeHtml(title)}</div>
@@ -336,6 +342,16 @@
       }
       .ofov-featured { background: #facc15; color: #000; }
       .ofov-badgeMore { background: rgba(0,0,0,0.6); color: rgba(255,255,255,0.75); cursor: help; }
+      .ofov-modifierOverlay {
+        position: absolute; inset: 0; z-index: 3;
+        display: flex; flex-wrap: wrap; align-content: flex-start;
+        gap: 6px; padding: 10px;
+        background: rgba(7, 14, 23, 0.92);
+        opacity: 0; pointer-events: none; overflow-y: auto;
+        transition: opacity 120ms ease;
+      }
+      .ofov-card:hover .ofov-modifierOverlay { opacity: 1; }
+      .ofov-badgeFull { max-width: none; overflow: visible; text-overflow: clip; white-space: normal; }
       .ofov-time {
         position: absolute; top: 0.5rem; right: 0.5rem;
         background: #4f9eff; color: #fff; font-size: 0.7rem; font-weight: 700;
