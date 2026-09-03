@@ -1801,6 +1801,10 @@
             ? `<span class="cardBadge cardBadgeMore" title="${escapeHtml(hiddenBadgeLabels.join(", "))}">+${hiddenBadgeLabels.length} more</span>`
             : "");
         const featuredBadge = featured ? `<span class="cardBadge featuredBadge">★ Featured</span>` : "";
+        // Individual badges already carry their own title tooltip, but a
+        // hover anywhere else on the card (the image, the gaps between
+        // badges) showed nothing — put the full list on the card itself too.
+        const cardTooltip = allBadgeLabels.length ? allBadgeLabels.join(", ") : "";
 
         return `
           <article
@@ -1811,6 +1815,7 @@
             data-join-url="${escapeHtml(joinUrl)}"
             data-fingerprint="${cardFingerprint(g)}"
             ${featured?.accent ? `data-accent="${escapeHtml(featured.accent)}"` : ""}
+            ${cardTooltip ? `title="${escapeHtml(cardTooltip)}"` : ""}
           >
             <div class="gameCardImage">
               <img

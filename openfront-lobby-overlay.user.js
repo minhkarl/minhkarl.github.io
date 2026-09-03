@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OpenFront Lobby Overlay
 // @namespace    https://minhkarl.github.io
-// @version      1.6.3
+// @version      1.6.4
 // @description  Replaces OpenFront's home-screen lobby preview cards with the richer minhkarl.github.io dashboard cards, and removes the JOIN LOBBY button.
 // @match        https://openfront.io/*
 // @run-at       document-idle
@@ -22,7 +22,14 @@
   const WORKER_POOL = ["w0", "w1", "w2", "w3", "w4"];
   // hosted lobbies can't join via a raw "join-lobby" dispatch like the other
   // categories — join-lobby-modal.open() has to run first to set up tracking
-  // state, or the lobby silently never opens (see the click handler).
+  // state, or the lobby silently never opens (see the click handler). It
+  // must be opened with lobbyId ONLY, no lobbyInfo: JoinLobbyModal.onOpen()
+  // only calls handleUrlJoin() (which is what eventually calls
+  // checkActiveLobby(), the only thing that actually dispatches the real
+  // join) when lobbyInfo is absent. Passing lobbyInfo up front (which seems
+  // like the more complete thing to do, since we already have it) instead
+  // leaves the modal stuck showing "Connecting..." forever with no join ever
+  // sent — traced in OpenFrontIO's JoinLobbyModal.ts, not guessed.
   const CATEGORIES = [
     { key: "ffa", label: "Free For All", dot: "#4f9eff", source: "public" },
     { key: "team", label: "Teams", dot: "#4ade80", source: "public" },
@@ -130,10 +137,14 @@
     const featuredBadge = lobby.featured ? `<span class="ofov-badge ofov-featured">★ Featured</span>` : "";
     const cardTimeText = timeText(lobby, serverTime);
     const mode = modeSummaryLine(cfg, lobby.numClients);
+    // Individual badges already carry their own title tooltip, but a hover
+    // anywhere else on the card (the image, the gaps between badges) showed
+    // nothing — put the full list on the card itself too.
+    const cardTooltip = allBadgeLabels.length ? allBadgeLabels.join(", ") : "";
     return `
       <article class="ofov-card" data-game-id="${escapeHtml(lobby.gameID)}" data-source="${source}" ${
       lobby.accent ? `data-accent="${escapeHtml(lobby.accent)}"` : ""
-    }>
+    } ${cardTooltip ? `title="${escapeHtml(cardTooltip)}"` : ""}>
         <img class="ofov-img" src="${getMapThumbnailUrl(map)}" alt="${escapeHtml(map)}" loading="lazy"
              onerror="this.style.opacity='0';">
         <div class="ofov-badges">${featuredBadge}${badges}</div>
@@ -393,7 +404,7 @@
       if (!lobby) return;
 
       if (card.dataset.source === "hosted") {
-        document.querySelector("join-lobby-modal")?.open({ lobbyId: lobby.gameID, lobbyInfo: lobby });
+        document.querySelector("join-lobby-modal")?.open({ lobbyId: lobby.gameID });
         return;
       }
 
