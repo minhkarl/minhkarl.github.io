@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OpenFront Lobby Overlay
 // @namespace    https://minhkarl.github.io
-// @version      1.6.10
+// @version      1.7.0
 // @description  Replaces OpenFront's home-screen lobby preview cards with the richer minhkarl.github.io dashboard cards, and removes the JOIN LOBBY button.
 // @match        https://openfront.io/*
 // @run-at       document-idle
@@ -170,6 +170,15 @@
     `;
   }
 
+  // Shows the fade only when there's actually more below the visible area —
+  // a column that fits without scrolling gets no fade at all.
+  function updateColumnFade(colCardsEl) {
+    const col = colCardsEl.closest(".ofov-col");
+    if (!col) return;
+    const hasMore = colCardsEl.scrollHeight - colCardsEl.clientHeight - colCardsEl.scrollTop > 2;
+    col.classList.toggle("ofov-hasMoreBelow", hasMore);
+  }
+
   function render(serverTime) {
     const root = document.getElementById("ofov-grid");
     if (!root) return;
@@ -186,10 +195,12 @@
             <span class="ofov-count">${list.length}</span>
           </div>
           <div class="ofov-colCards">${cards}</div>
+          <div class="ofov-colCardsFade" aria-hidden="true"></div>
         </div>
       `;
     }).join("");
     root.innerHTML = html;
+    root.querySelectorAll(".ofov-colCards").forEach(updateColumnFade);
   }
 
   function reindex() {
@@ -292,7 +303,7 @@
       @media (max-width: 640px) {
         #ofov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
-      .ofov-col { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+      .ofov-col { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; position: relative; }
       .ofov-colHeader {
         display: flex; align-items: center; gap: 0.4rem;
         font-size: 0.7rem; font-weight: 800; color: #fff;
@@ -305,7 +316,19 @@
         margin-left: auto; background: rgba(255,255,255,0.12);
         border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 0.65rem;
       }
-      .ofov-colCards { display: flex; flex-direction: column; gap: 0.6rem; }
+      .ofov-colCards {
+        display: flex; flex-direction: column; gap: 0.6rem;
+        max-height: 34rem; overflow-y: auto; overflow-x: hidden; padding-bottom: 2px;
+      }
+      /* Overlays the bottom of .ofov-colCards (a sibling, so it stays put
+         instead of scrolling away) — only shown once JS confirms via
+         .ofov-hasMoreBelow that there's actually more to scroll to. */
+      .ofov-colCardsFade {
+        position: absolute; left: 0; right: 0; bottom: 0; height: 2.5rem;
+        background: linear-gradient(transparent, #1a1f2e 85%);
+        pointer-events: none; opacity: 0; transition: opacity 150ms ease;
+      }
+      .ofov-col.ofov-hasMoreBelow .ofov-colCardsFade { opacity: 1; }
       .ofov-colEmpty {
         color: rgba(255,255,255,0.4); font-size: 0.75rem;
         text-align: center; padding: 1rem 0;
@@ -432,6 +455,17 @@
         }),
       );
     });
+    // "scroll" doesn't bubble, and render() rebuilds .ofov-colCards on every
+    // full snapshot — a listener on those elements wouldn't survive. root
+    // itself is never rebuilt, so listen there in the capture phase instead,
+    // which still sees scroll events from any descendant.
+    root.addEventListener(
+      "scroll",
+      (e) => {
+        if (e.target.classList?.contains("ofov-colCards")) updateColumnFade(e.target);
+      },
+      true,
+    );
     gms.parentNode.insertBefore(root, gms);
   }
 
@@ -453,16 +487,6 @@
     }
   }
 
-  // Same hit counter shown on minhkarl.github.io's header badge — that only
-  // increments when someone loads the dashboard page, so an overlay-only
-  // visitor never counted. Firing the same request here (no display, no
-  // response handling needed) puts both audiences in one number. An <img>
-  // request rather than fetch() avoids any CORS concern, same as how the
-  // badge itself works.
-  function pingVisitCounter() {
-    new Image().src = "https://hits.sh/minhkarl.github.io.svg?style=flat&label=visits&color=62b0ff&labelColor=0d1520";
-  }
-
   let started = false;
 
   function init() {
@@ -476,7 +500,6 @@
     injectStyle();
     mount(gms);
     connect();
-    pingVisitCounter();
     setInterval(tickTimers, 1000);
     setTimeout(() => verifyIntegration(gms), 1000);
   }
