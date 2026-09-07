@@ -12,24 +12,14 @@
 // @grant        none
 // ==/UserScript==
 
-// Reuses lobby-wire.js (kept in sync by resync-lobby-wire.yml) over an
-// independent connection to the same public lobby feed. Cards dispatch the
-// same "join-lobby" event OpenFront's own cards do, so the real join flow
-// is untouched — this only changes how lobbies are picked.
 (function () {
   "use strict";
 
   const WORKER_POOL = ["w0", "w1", "w2", "w3", "w4"];
-  // hosted lobbies can't join via a raw "join-lobby" dispatch like the other
-  // categories — join-lobby-modal.open() has to run first to set up tracking
-  // state, or the lobby silently never opens (see the click handler). It
-  // must be opened with lobbyId ONLY, no lobbyInfo: JoinLobbyModal.onOpen()
-  // only calls handleUrlJoin() (which is what eventually calls
-  // checkActiveLobby(), the only thing that actually dispatches the real
-  // join) when lobbyInfo is absent. Passing lobbyInfo up front (which seems
-  // like the more complete thing to do, since we already have it) instead
-  // leaves the modal stuck showing "Connecting..." forever with no join ever
-  // sent — traced in OpenFrontIO's JoinLobbyModal.ts, not guessed.
+  // Hosted lobbies must join via join-lobby-modal.open({lobbyId}) with NO
+  // lobbyInfo — JoinLobbyModal.onOpen() only calls handleUrlJoin() (which
+  // dispatches the real join) when lobbyInfo is absent. Passing it up front
+  // leaves the modal stuck on "Connecting..." forever.
   const CATEGORIES = [
     { key: "ffa", label: "Free For All", dot: "#4f9eff", source: "public" },
     { key: "team", label: "Teams", dot: "#4ade80", source: "public" },
@@ -40,15 +30,19 @@
   const state = {
     games: { ffa: [], team: [], special: [], hosted: [] },
     byId: new Map(),
+    // gameID -> card element, rebuilt once per render() so the once-a-second
+    // timer tick and the frequent counts patches below can look cards up
+    // directly instead of re-querying the DOM every time.
+    cardEls: new Map(),
+    // gameID -> that card's .ofov-time element, same reasoning as cardEls.
+    timeEls: new Map(),
     serverTime: undefined,
     serverTimeCapturedAt: undefined,
   };
 
-  // Full snapshots (the only source of serverTime) arrive far less than once
-  // a second, so extrapolate "now" from real elapsed time since the last one.
-  // Past STALE_AFTER_MS (the socket's been down that long), stop trusting the
-  // extrapolation — countdowns should fall back to "Open" rather than keep
-  // ticking convincingly on data that's no longer being refreshed.
+  // Full snapshots (the only source of serverTime) arrive well under once a
+  // second, so extrapolate "now" from elapsed time; past this cutoff, stop
+  // trusting the extrapolation and fall back to "Open".
   const STALE_AFTER_MS = 30_000;
 
   function estimatedServerTime() {
@@ -81,7 +75,8 @@
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;");
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
   }
 
   // Shared with index.html via modifier-labels.js (@require above) — one
@@ -147,7 +142,8 @@
           .join("")}</div>`
       : "";
     return `
-      <article class="ofov-card" data-game-id="${escapeHtml(lobby.gameID)}" data-source="${source}" ${
+      <article class="ofov-card" data-game-id="${escapeHtml(lobby.gameID)}" data-source="${source}"
+        tabindex="0" role="button" aria-label="Join ${escapeHtml(title)}, ${escapeHtml(mode)}" ${
       lobby.accent ? `data-accent="${escapeHtml(lobby.accent)}"` : ""
     }>
         <img class="ofov-img" src="${getMapThumbnailUrl(map)}" alt="${escapeHtml(map)}" loading="lazy"
@@ -182,10 +178,28 @@
   function render(serverTime) {
     const root = document.getElementById("ofov-grid");
     if (!root) return;
+
+    const firstRects = new Map();
+    root.querySelectorAll(".ofov-card[data-game-id]").forEach((card) => {
+      firstRects.set(card.dataset.gameId, card.getBoundingClientRect());
+    });
+
     const html = CATEGORIES.map(({ key, label, dot, source }) => {
       const list = state.games[key] || [];
       const cards = list.length
-        ? list.map((g) => cardHtml(g, serverTime, source)).join("")
+        ? list
+            .map((g) => {
+              // One malformed lobby (or a modifier-labels.js @require that
+              // failed to load) shouldn't take down every column — skip
+              // just that card and keep going.
+              try {
+                return cardHtml(g, serverTime, source);
+              } catch (e) {
+                console.error("[of-overlay] failed to render lobby card", g?.gameID, e);
+                return "";
+              }
+            })
+            .join("")
         : `<div class="ofov-colEmpty">No open lobbies</div>`;
       return `
         <div class="ofov-col">
@@ -195,12 +209,64 @@
             <span class="ofov-count">${list.length}</span>
           </div>
           <div class="ofov-colCards">${cards}</div>
-          <div class="ofov-colCardsFade" aria-hidden="true"></div>
+          <div class="ofov-colCardsFade" aria-hidden="true">
+            <span class="ofov-moreHint">▾ Scroll for more</span>
+          </div>
         </div>
       `;
     }).join("");
     root.innerHTML = html;
     root.querySelectorAll(".ofov-colCards").forEach(updateColumnFade);
+
+    state.cardEls.clear();
+    state.timeEls.clear();
+
+    // FLIP (First-Last-Invert-Play): a card that shifts position across a
+    // rebuild — most commonly the one below a lobby that just ended sliding
+    // up to take its place — jumps from doing this instantly to visibly
+    // animating into its new spot. Read every card's rect first, in one
+    // pass, before writing any style — writing a transform on one card would
+    // otherwise invalidate layout for the next card's rect read, forcing a
+    // separate synchronous reflow per moved card instead of sharing one.
+    const moves = [];
+    root.querySelectorAll(".ofov-card[data-game-id]").forEach((card) => {
+      const gameId = card.dataset.gameId;
+      state.cardEls.set(gameId, card);
+      const timeEl = card.querySelector(".ofov-time");
+      if (timeEl) state.timeEls.set(gameId, timeEl);
+
+      const first = firstRects.get(gameId);
+      if (!first) return;
+      const last = card.getBoundingClientRect();
+      const dx = first.left - last.left;
+      const dy = first.top - last.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      moves.push({ card, dx, dy });
+    });
+
+    if (moves.length) {
+      for (const { card, dx, dy } of moves) {
+        card.style.transition = "none";
+        card.style.transform = `translate(${dx}px, ${dy}px)`;
+      }
+      // One shared reflow for the whole batch of moved cards, so the browser
+      // registers every starting position before the transition below is
+      // applied — otherwise each pair of style writes above/below could
+      // coalesce into one frame and the cards would just snap with no
+      // visible motion.
+      void root.offsetHeight;
+      for (const { card } of moves) {
+        card.style.transition = "transform 220ms ease";
+        card.style.transform = "";
+        card.addEventListener(
+          "transitionend",
+          () => {
+            card.style.transition = "";
+          },
+          { once: true },
+        );
+      }
+    }
   }
 
   function reindex() {
@@ -217,7 +283,7 @@
   function patchCounts(updatedIds) {
     for (const id of updatedIds) {
       const g = state.byId.get(id);
-      const card = document.querySelector(`.ofov-card[data-game-id="${CSS.escape(id)}"]`);
+      const card = state.cardEls.get(id);
       const metaSpan = card?.querySelector(".ofov-meta span");
       if (!g || !metaSpan) continue;
       const maxPlayers = g.gameConfig?.maxPlayers;
@@ -225,21 +291,34 @@
     }
   }
 
-  // Text-only patch, same reasoning as patchCounts above.
+  // Text-only patch, same reasoning as patchCounts above. Passing `now`
+  // through even when estimatedServerTime() has gone stale (undefined) is
+  // deliberate — timeText() already falls back to "Open" in that case, so
+  // countdowns don't freeze at their last value once the socket's been
+  // quiet past STALE_AFTER_MS.
   function tickTimers() {
     const now = estimatedServerTime();
-    if (now === undefined) return;
-    document.querySelectorAll("#ofov-grid .ofov-card[data-game-id]").forEach((card) => {
-      const lobby = state.byId.get(card.dataset.gameId);
-      const timeEl = card.querySelector(".ofov-time");
-      if (lobby && timeEl) timeEl.textContent = timeText(lobby, now);
-    });
+    for (const [gameId, timeEl] of state.timeEls) {
+      const lobby = state.byId.get(gameId);
+      if (lobby) timeEl.textContent = timeText(lobby, now);
+    }
   }
+
+  // Exponential backoff (capped, with jitter) for reconnects — a flat
+  // fixed-interval retry means every connected client hammers the lobby
+  // server on the same cadence for as long as it's down.
+  const RECONNECT_BASE_MS = 1000;
+  const RECONNECT_MAX_MS = 30_000;
+  let reconnectDelayMs = RECONNECT_BASE_MS;
 
   function connect() {
     const worker = WORKER_POOL[Math.floor(Math.random() * WORKER_POOL.length)];
     const ws = new WebSocket(`wss://openfront.io/${worker}/lobbies`);
     ws.binaryType = "arraybuffer";
+
+    ws.onopen = () => {
+      reconnectDelayMs = RECONNECT_BASE_MS;
+    };
 
     ws.onmessage = (ev) => {
       let msg;
@@ -277,7 +356,11 @@
       }
     };
 
-    ws.onclose = () => setTimeout(connect, 3000);
+    ws.onclose = () => {
+      const delay = reconnectDelayMs;
+      reconnectDelayMs = Math.min(reconnectDelayMs * 2, RECONNECT_MAX_MS);
+      setTimeout(connect, delay + Math.random() * delay * 0.3);
+    };
     ws.onerror = () => {
       try {
         ws.close();
@@ -293,6 +376,137 @@
          rather than touching game-mode-selector's own Lit-managed DOM. */
       game-mode-selector div[class*="h-14"] { display: none !important; }
 
+      /* Identity row (flag + username + skin, in <play-page>'s render()) —
+         shrunk, not hidden: still fully usable, just claiming less of the
+         vertical space above the lobby grid. Targets the exact Tailwind
+         arbitrary-value classes from PlayPage.ts (min-h-[60px]/max-h-[52px]/
+         h-[50px]) the same substring-match way the native grid is hidden
+         above, since none of these elements have their own id/data-hook.
+         Also has sm:flex-1 in its own class list, and its flex-column parent
+         gets stretched tall by the top-strip grid's items-stretch (to match
+         Streaming Now's height) — flex-grow fills that freed space right
+         back up regardless of min-height/max-height, which is why capping
+         only the height left it looking unchanged. flex:0 0 auto stops it
+         from growing to fill that space at all. */
+      div[class*="sm:min-h-[60px]"] {
+        min-height: 60px !important;
+        max-height: 72px !important;
+        flex: 0 0 auto !important;
+      }
+      flag-input[class*="max-h-[52px]"],
+      cosmetics-input[class*="max-h-[52px]"] { max-height: 56px !important; }
+      username-input[class*="sm:h-[50px]"] { height: 56px !important; }
+
+      /* Streaming Now is now just a small hover-icon (see below), not a
+         real column of content, so the 2fr/1fr split PlayPage.ts's grid
+         switches to whenever a stream is live wastes a third of the row on
+         it. Give the icon just enough column to fit itself (auto) and let
+         the identity bar's column (1fr) take the rest, both centered on the
+         row's cross axis — items-stretch was the source of the original
+         "everything stretches to match" bug, so replace it outright rather
+         than leaving it for the icon to fight too. */
+      div[class*="lg:has-[.streaming-live]:grid-cols-[2fr_1fr]"] {
+        grid-template-columns: 1fr auto !important;
+        align-items: center !important;
+      }
+
+      /* Streaming Now — collapsed to a small square icon sitting in that
+         auto column beside the identity bar (a normal in-flow grid item now,
+         not fixed/absolute — that's what actually keeps it visually
+         anchored next to the bar instead of floating in a page corner
+         unrelated to it). Hovering (or focusing into it via keyboard)
+         reveals streaming-now's real rendered panel — untouched, not
+         reimplemented — as a popover that grows out of the icon in place,
+         the same hide-native/reveal-on-demand pattern used for news-box. */
+      streaming-now.streaming-live {
+        flex: 0 0 auto !important;
+        align-self: center !important;
+        position: relative !important;
+        z-index: 90000 !important;
+        width: 46px !important;
+        min-width: 46px !important;
+        height: 46px !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+        cursor: pointer !important;
+      }
+      streaming-now.streaming-live::before {
+        content: "🔴";
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.3rem;
+        animation: ofovStreamPulse 1.6s ease-in-out infinite;
+        pointer-events: none;
+      }
+      @keyframes ofovStreamPulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.45; }
+      }
+      /* Targets the real content div by its own distinctive class fragment
+         (sm:justify-center, from StreamingNow.ts's render()) rather than
+         "> div" — a positional child selector breaks the moment that
+         render() gains a sibling (it already renders a <style> tag before
+         this div; another wrapper would silently defeat a > div match). */
+      streaming-now.streaming-live div[class*="sm:justify-center"] {
+        position: absolute !important;
+        top: 0 !important;
+        right: 0 !important;
+        width: 46px !important;
+        height: auto !important;
+        max-height: 0 !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transition: width 220ms ease, max-height 220ms ease, opacity 220ms ease !important;
+        z-index: 90000 !important;
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.46) !important;
+        border-radius: 0.75rem !important;
+      }
+      streaming-now.streaming-live:hover div[class*="sm:justify-center"],
+      streaming-now.streaming-live:focus-within div[class*="sm:justify-center"] {
+        width: 280px !important;
+        /* Generously larger than any realistic streamer-row content — the
+           collapsed 0 needs a finite max-height to animate from at all, but
+           a cap that's actually tight enough to matter here would just clip
+           the real panel's content again instead of merely running the
+           open/close transition. overflow flips to visible too, once open,
+           so nothing inside (a long streamer title, its own hover states)
+           gets cropped either. */
+        max-height: 500px !important;
+        overflow: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+
+      /* <news-box> (the inline "Steam is coming!" style announcement card)
+         is light-DOM Lit like game-mode-selector, so hiding it by default is
+         the same safe pattern — its own state (cycling/dismiss) keeps
+         running in the background regardless of display:none. Relocated to
+         a small icon in <nav-utility-icons> (see relocateNewsBox()); opening
+         that icon just flips this same class rather than re-implementing
+         the card's content. */
+      news-box { display: none !important; }
+      news-box.ofov-newsOpen {
+        display: block !important;
+        position: fixed !important;
+        top: 4.5rem;
+        right: 1rem;
+        z-index: 100000;
+        width: min(360px, calc(100vw - 2rem));
+        border-radius: 0.75rem;
+        overflow: hidden;
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.46);
+        animation: ofovNewsPopIn 0.15s ease-out;
+      }
+      @keyframes ofovNewsPopIn {
+        from { opacity: 0; transform: translateY(-6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
       #ofov-root { width: 100%; }
       #ofov-grid {
         display: grid;
@@ -303,32 +517,51 @@
       @media (max-width: 640px) {
         #ofov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
-      .ofov-col { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; position: relative; }
+      .ofov-col { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; position: relative; }
       .ofov-colHeader {
-        display: flex; align-items: center; gap: 0.4rem;
-        font-size: 0.7rem; font-weight: 800; color: #fff;
-        text-transform: uppercase; letter-spacing: 0.04em;
+        display: flex; align-items: center; gap: 0.45rem;
+        font-size: 0.85rem; font-weight: 800; color: #fff;
+        text-transform: uppercase; letter-spacing: 0.03em;
         background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 0.5rem; padding: 0.4rem 0.6rem;
+        border-radius: 0.6rem; padding: 0.5rem 0.75rem;
       }
-      .ofov-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; flex-shrink: 0; }
+      .ofov-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; flex-shrink: 0; }
       .ofov-count {
         margin-left: auto; background: rgba(255,255,255,0.12);
-        border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 0.65rem;
+        border-radius: 999px; padding: 0.15rem 0.5rem; font-size: 0.75rem;
       }
       .ofov-colCards {
         display: flex; flex-direction: column; gap: 0.6rem;
-        max-height: 34rem; overflow-y: auto; overflow-x: hidden; padding-bottom: 2px;
+        /* Exactly 2 cards (13rem each) + the gap between them — a 3rd card
+           is fully clipped rather than peeking through, so scrolling only
+           ever shows up once there's actually a 3rd+ lobby. */
+        max-height: calc(13rem * 2 + 0.6rem);
+        overflow-y: auto; overflow-x: hidden; padding-bottom: 2px;
+        /* Scrolling still works — only the native scrollbar track/thumb is
+           hidden, since .ofov-moreHint is the intended "there's more" cue. */
+        scrollbar-width: none;
       }
+      .ofov-colCards::-webkit-scrollbar { display: none; }
       /* Overlays the bottom of .ofov-colCards (a sibling, so it stays put
          instead of scrolling away) — only shown once JS confirms via
          .ofov-hasMoreBelow that there's actually more to scroll to. */
       .ofov-colCardsFade {
         position: absolute; left: 0; right: 0; bottom: 0; height: 2.5rem;
         background: linear-gradient(transparent, #1a1f2e 85%);
+        display: flex; align-items: flex-end; justify-content: center; padding-bottom: 0.35rem;
         pointer-events: none; opacity: 0; transition: opacity 150ms ease;
       }
       .ofov-col.ofov-hasMoreBelow .ofov-colCardsFade { opacity: 1; }
+      .ofov-moreHint {
+        font-size: 0.62rem; font-weight: 800; color: #fff;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        background: rgba(0,0,0,0.6); padding: 0.2rem 0.55rem; border-radius: 999px;
+        animation: ofovMoreHintBounce 1.6s ease-in-out infinite;
+      }
+      @keyframes ofovMoreHintBounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(3px); }
+      }
       .ofov-colEmpty {
         color: rgba(255,255,255,0.4); font-size: 0.75rem;
         text-align: center; padding: 1rem 0;
@@ -338,6 +571,12 @@
         display: block;
         width: 100%;
         height: 13rem;
+        /* .ofov-colCards is a column flex container with overflow-y:auto —
+           that combination drops the browser's automatic min-size for flex
+           children to 0 (spec behavior once overflow isn't visible), so
+           without flex-shrink:0 cards get squashed to fit instead of the
+           container scrolling past them. */
+        flex-shrink: 0;
         border-radius: 1rem;
         overflow: hidden;
         background: #1a1f2e;
@@ -347,6 +586,7 @@
         transition: transform 0.15s ease;
       }
       .ofov-card:hover { transform: scale(1.02); }
+      .ofov-card:focus-visible { outline: 2px solid #4f9eff; outline-offset: 2px; }
       .ofov-card[data-accent="gold"] { box-shadow: 0 0 0 2px #facc15; }
       .ofov-img {
         position: absolute; inset: 0; width: 100%; height: 100%;
@@ -430,15 +670,7 @@
         <button class="ofov-actionBtn" data-action="ranked">Ranked</button>
       </div>
     `;
-    root.addEventListener("click", (e) => {
-      const actionBtn = e.target.closest("[data-action]");
-      if (actionBtn) {
-        ACTIONS[actionBtn.dataset.action]?.();
-        return;
-      }
-
-      const card = e.target.closest("[data-game-id]");
-      if (!card) return;
+    function joinFromCard(card) {
       const lobby = state.byId.get(card.dataset.gameId);
       if (!lobby) return;
 
@@ -454,6 +686,27 @@
           composed: true,
         }),
       );
+    }
+
+    root.addEventListener("click", (e) => {
+      const actionBtn = e.target.closest("[data-action]");
+      if (actionBtn) {
+        ACTIONS[actionBtn.dataset.action]?.();
+        return;
+      }
+
+      const card = e.target.closest("[data-game-id]");
+      if (card) joinFromCard(card);
+    });
+    // Cards are focusable (tabindex="0"/role="button" in cardHtml) but
+    // <article> has no native activation key handling like <button> does,
+    // so Enter/Space have to be wired up by hand for keyboard users.
+    root.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const card = e.target.closest("[data-game-id]");
+      if (!card) return;
+      e.preventDefault();
+      joinFromCard(card);
     });
     // "scroll" doesn't bubble, and render() rebuilds .ofov-colCards on every
     // full snapshot — a listener on those elements wouldn't survive. root
@@ -467,6 +720,101 @@
       true,
     );
     gms.parentNode.insertBefore(root, gms);
+  }
+
+  // <news-box> ships CSS-hidden (see injectStyle) so it stops eating vertical
+  // space above the lobby grid; this gives it back as a small icon instead of
+  // dropping it. Targets <desktop-nav-bar>'s <nav> and <mobile-nav-bar>'s menu
+  // list directly — verified against the actually-deployed release (v0.33.14),
+  // not main: OpenFront has a newer <nav-utility-icons> refactor on main that
+  // consolidates these into one component, but it isn't live yet, so building
+  // against it was the mistake ("shape not yet released" — the same class of
+  // bug as trusted-lobby GameConfig drift). Both are light-DOM Lit, same
+  // "safe to touch from outside" pattern already relied on elsewhere here.
+  // Retries briefly since the nav chrome and the play page aren't guaranteed
+  // to mount in the same tick.
+  function relocateNewsBox(attemptsLeft = 15) {
+    const newsBox = document.querySelector("news-box");
+    const desktopNav = document.querySelector("desktop-nav-bar nav");
+    // Substring match, same reasoning as the game-mode-selector hide rules —
+    // this div has no id/data-hook of its own, just a long Tailwind class
+    // string, so anchor on one distinctive fragment of it.
+    const mobileNav = document.querySelector('mobile-nav-bar div[class*="overflow-y-auto"]');
+    if (!newsBox || (!desktopNav && !mobileNav)) {
+      if (attemptsLeft > 0) setTimeout(() => relocateNewsBox(attemptsLeft - 1), 300);
+      return;
+    }
+
+    const setOpen = (open) => newsBox.classList.toggle("ofov-newsOpen", open);
+    // news-box renders `nothing` (no children at all) when it has no items
+    // — cheaper and more robust than reaching into its private Lit state.
+    const hasNews = () => newsBox.children.length > 0;
+
+    const iconEls = [];
+    function addIcon(container, html) {
+      if (!container || container.querySelector(".ofov-newsIconWrap")) return;
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      const el = wrap.firstElementChild;
+      el.querySelector("button").addEventListener("click", (e) => {
+        e.stopPropagation();
+        setOpen(!newsBox.classList.contains("ofov-newsOpen"));
+      });
+      container.appendChild(el);
+      iconEls.push(el);
+    }
+
+    const dotHtml = `<span class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping ofov-newsDot"></span>
+                 <span class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full ofov-newsDot"></span>`;
+
+    // news-box's own item list can change after this ran once (news
+    // arriving later, or the user dismissing it) — re-derive the dot on
+    // every childList change instead of baking a one-time snapshot into the
+    // icon HTML above.
+    function syncDot() {
+      const show = hasNews();
+      for (const el of iconEls) {
+        el.querySelectorAll(".ofov-newsDot").forEach((d) => d.remove());
+        if (show) el.insertAdjacentHTML("beforeend", dotHtml);
+      }
+    }
+
+    // Matches the NEWS/STORE/HELP items' own markup shape exactly (a
+    // `.relative` wrapper around a `.nav-menu-item` button plus its dot).
+    addIcon(
+      desktopNav,
+      `<div class="relative ofov-newsIconWrap">
+        <button
+          class="nav-menu-item text-white/70 hover:text-malibu-blue font-medium tracking-wider uppercase cursor-pointer transition-colors [&.active]:text-malibu-blue"
+          type="button"
+          aria-label="News"
+          title="News"
+        >📰</button>
+      </div>`,
+    );
+
+    // Mobile's menu items are full-width rows, not a button cluster.
+    addIcon(
+      mobileNav,
+      `<div class="nav-menu-item flex items-center w-full cursor-pointer ofov-newsIconWrap">
+        <button
+          class="block text-left font-bold uppercase tracking-[0.05em] text-white/70 transition-all duration-200 cursor-pointer hover:text-blue-600"
+          type="button"
+        >📰 News</button>
+      </div>`,
+    );
+
+    syncDot();
+    new MutationObserver(syncDot).observe(newsBox, { childList: true });
+
+    document.addEventListener("click", (e) => {
+      if (!newsBox.classList.contains("ofov-newsOpen")) return;
+      if (newsBox.contains(e.target) || e.target.closest(".ofov-newsIconWrap")) return;
+      setOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && newsBox.classList.contains("ofov-newsOpen")) setOpen(false);
+    });
   }
 
   // The CSS hiding rules and the SOLO/CREATE/RANKED/hosted-join actions all
@@ -499,6 +847,7 @@
     started = true;
     injectStyle();
     mount(gms);
+    relocateNewsBox();
     connect();
     setInterval(tickTimers, 1000);
     setTimeout(() => verifyIntegration(gms), 1000);

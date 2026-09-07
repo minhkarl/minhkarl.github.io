@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>OpenFront Lobbies</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="styles.css" />
   </head>
 
@@ -18,9 +19,50 @@
         </a>
 
         <div class="headerActions">
-          <button id="toggleFilters" class="filtersToggle" type="button">Filters</button>          
+          <button id="toggleFilters" class="filtersToggle" type="button">Filters</button>
           <button id="viewToggle" class="viewToggle" type="button">Detailed table</button>
           <button id="alertToggle" class="alertToggle" type="button">Alerts: Off</button>
+          <div class="extensionBadgeWrap">
+            <button id="extensionBadge" class="extensionBadge" type="button" aria-expanded="false" aria-haspopup="true">
+              🧩 Overlay extension
+              <span id="extensionBadgeDot" class="extensionBadgeDot" aria-hidden="true"></span>
+            </button>
+            <div id="extensionDropdown" class="extensionDropdown" hidden>
+              <div class="extensionPromoTitle">Lobby Overlay extension</div>
+              <div class="extensionPromoBody">
+                Bring these lobby cards straight into openfront.io's own lobby picker, no more tab-switching to join a game.
+              </div>
+              <ol class="extensionPromoSteps">
+                <li>
+                  Install a userscript manager like
+                  <a href="https://www.tampermonkey.net/" target="_blank" rel="noreferrer">Tampermonkey</a>
+                  (Chrome, Edge, Firefox, Safari).
+                </li>
+                <li>
+                  On Chrome or Edge, open <code>chrome://extensions</code>, click "Details" under Tampermonkey, and turn on
+                  "Allow User Scripts".
+                </li>
+                <li>
+                  <a
+                    href="https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js"
+                    target="_blank"
+                    rel="noreferrer"
+                  >Click here to install the overlay script</a>
+                  Tampermonkey will pop up an install prompt automatically.
+                </li>
+                <li>Click "Install" in that Tampermonkey tab.</li>
+                <li>Open <a href="https://openfront.io/" target="_blank" rel="noreferrer">openfront.io</a> and the lobby picker is replaced automatically.</li>
+              </ol>
+              <div class="extensionPromoActions">
+                <a
+                  class="extensionPromoInstallBtn"
+                  href="https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js"
+                  target="_blank"
+                  rel="noreferrer"
+                >Install extension</a>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="counts">
@@ -188,47 +230,6 @@
             </tr>
           </tbody>
         </table>
-      </div>
-    </div>
-
-    <div id="extensionPromo" class="extensionPromo" hidden>
-      <button id="extensionPromoClose" class="extensionPromoClose" type="button" aria-label="Dismiss">×</button>
-      <div class="extensionPromoTitle">🧩 New: Lobby Overlay extension</div>
-      <div class="extensionPromoBody">
-        Bring these lobby cards straight into openfront.io's own lobby picker, no more tab-switching to join a game.
-      </div>
-      <button id="extensionPromoToggle" class="extensionPromoToggle" type="button" aria-expanded="false">
-        How do I get it?
-      </button>
-      <ol id="extensionPromoSteps" class="extensionPromoSteps" hidden>
-        <li>
-          Install a userscript manager like
-          <a href="https://www.tampermonkey.net/" target="_blank" rel="noreferrer">Tampermonkey</a>
-          (Chrome, Edge, Firefox, Safari).
-        </li>
-        <li>
-          On Chrome or Edge, open <code>chrome://extensions</code>, click "Details" under Tampermonkey, and turn on
-          "Allow User Scripts".
-        </li>
-        <li>
-          <a
-            id="extensionPromoInstallLink"
-            href="https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js"
-            target="_blank"
-            rel="noreferrer"
-          >Click here to install the overlay script</a>
-            Tampermonkey will pop up an install prompt automatically.
-        </li>
-        <li>Click "Install" in that Tampermonkey tab.</li>
-        <li>Open <a href="https://openfront.io/" target="_blank" rel="noreferrer">openfront.io</a> and the lobby picker is replaced automatically.</li>
-      </ol>
-      <div class="extensionPromoActions">
-        <a
-          class="extensionPromoInstallBtn"
-          href="https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js"
-          target="_blank"
-          rel="noreferrer"
-        >Install extension</a>
       </div>
     </div>
 

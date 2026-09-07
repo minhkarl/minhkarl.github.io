@@ -1,34 +1,37 @@
-      (() => {
-        const PROMO_VERSION = "1"; // bump to re-show after dismissal for a future announcement
-        const DISMISS_KEY = "ofExtensionPromoDismissed";
+(() => {
+  const SEEN_KEY = "ofExtensionBadgeSeen";
 
-        const promo = document.getElementById("extensionPromo");
-        const closeBtn = document.getElementById("extensionPromoClose");
-        const toggleBtn = document.getElementById("extensionPromoToggle");
-        const steps = document.getElementById("extensionPromoSteps");
-        if (!promo || !closeBtn || !toggleBtn || !steps) return;
+  const wrap = document.querySelector(".extensionBadgeWrap");
+  const badge = document.getElementById("extensionBadge");
+  const dot = document.getElementById("extensionBadgeDot");
+  const dropdown = document.getElementById("extensionDropdown");
+  if (!wrap || !badge || !dot || !dropdown) return;
 
-        let dismissedVersion = null;
-        try {
-          dismissedVersion = localStorage.getItem(DISMISS_KEY);
-        } catch (_) {}
+  try {
+    if (localStorage.getItem(SEEN_KEY) === "1") dot.hidden = true;
+  } catch (_) {}
 
-        if (dismissedVersion === PROMO_VERSION) return;
+  function setOpen(open) {
+    dropdown.hidden = !open;
+    badge.setAttribute("aria-expanded", String(open));
+    if (open) {
+      dot.hidden = true;
+      try {
+        localStorage.setItem(SEEN_KEY, "1");
+      } catch (_) {}
+    }
+  }
 
-        setTimeout(() => {
-          promo.hidden = false;
-        }, 1200);
+  badge.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOpen(dropdown.hidden);
+  });
 
-        closeBtn.addEventListener("click", () => {
-          promo.hidden = true;
-          try {
-            localStorage.setItem(DISMISS_KEY, PROMO_VERSION);
-          } catch (_) {}
-        });
+  document.addEventListener("click", (e) => {
+    if (!dropdown.hidden && !wrap.contains(e.target)) setOpen(false);
+  });
 
-        toggleBtn.addEventListener("click", () => {
-          const expanded = toggleBtn.getAttribute("aria-expanded") === "true";
-          toggleBtn.setAttribute("aria-expanded", String(!expanded));
-          steps.hidden = expanded;
-        });
-      })();
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !dropdown.hidden) setOpen(false);
+  });
+})();
