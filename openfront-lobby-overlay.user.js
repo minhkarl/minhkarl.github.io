@@ -30,12 +30,14 @@
   const state = {
     games: { ffa: [], team: [], special: [], hosted: [] },
     byId: new Map(),
-    // gameID -> card element, rebuilt once per render() so the once-a-second
-    // timer tick and the frequent counts patches below can look cards up
-    // directly instead of re-querying the DOM every time.
-    cardEls: new Map(),
-    // gameID -> that card's .ofov-time element, same reasoning as cardEls.
+    // gameID -> that card's .ofov-time element, rebuilt once per render() so
+    // the once-a-second timer tick can update text directly instead of
+    // re-querying the DOM every tick.
     timeEls: new Map(),
+    // gameID -> that card's player-count <span>, same reasoning as timeEls —
+    // "counts" frames arrive often, so patchCounts needs a direct reference
+    // rather than a querySelector per lobby per frame.
+    metaEls: new Map(),
     serverTime: undefined,
     serverTimeCapturedAt: undefined,
   };
@@ -52,12 +54,21 @@
     return state.serverTime + elapsed;
   }
 
+  // Same handful of maps recur across every lobby on every render — cache
+  // the computed URL per name instead of re-running the regex replaces.
+  const thumbnailUrlCache = new Map();
   function getMapThumbnailUrl(mapName) {
-    const slug = String(mapName || "")
-      .toLowerCase()
-      .replace(/[\s_]/g, "")
-      .replace(/[^\w]/g, "");
-    return `https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/maps/${slug}/thumbnail.webp`;
+    const key = String(mapName || "");
+    let url = thumbnailUrlCache.get(key);
+    if (url === undefined) {
+      const slug = key
+        .toLowerCase()
+        .replace(/[\s_]/g, "")
+        .replace(/[^\w]/g, "");
+      url = `https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/maps/${slug}/thumbnail.webp`;
+      thumbnailUrlCache.set(key, url);
+    }
+    return url;
   }
 
   function formatDuration(s) {
@@ -156,9 +167,7 @@
           <div class="ofov-subrow">
             <div class="ofov-mode">${escapeHtml(mode)}</div>
             <div class="ofov-meta">
-              <span>${escapeHtml(String(lobby.numClients ?? 0))}${
-      cfg.maxPlayers != null ? "/" + escapeHtml(String(cfg.maxPlayers)) : ""
-    } 👥</span>
+              <span>${lobby.numClients ?? 0}${cfg.maxPlayers != null ? "/" + cfg.maxPlayers : ""} 👥</span>
             </div>
           </div>
         </div>
@@ -218,8 +227,8 @@
     root.innerHTML = html;
     root.querySelectorAll(".ofov-colCards").forEach(updateColumnFade);
 
-    state.cardEls.clear();
     state.timeEls.clear();
+    state.metaEls.clear();
 
     // FLIP (First-Last-Invert-Play): a card that shifts position across a
     // rebuild — most commonly the one below a lobby that just ended sliding
@@ -231,9 +240,10 @@
     const moves = [];
     root.querySelectorAll(".ofov-card[data-game-id]").forEach((card) => {
       const gameId = card.dataset.gameId;
-      state.cardEls.set(gameId, card);
       const timeEl = card.querySelector(".ofov-time");
       if (timeEl) state.timeEls.set(gameId, timeEl);
+      const metaEl = card.querySelector(".ofov-meta span");
+      if (metaEl) state.metaEls.set(gameId, metaEl);
 
       const first = firstRects.get(gameId);
       if (!first) return;
@@ -283,8 +293,7 @@
   function patchCounts(updatedIds) {
     for (const id of updatedIds) {
       const g = state.byId.get(id);
-      const card = state.cardEls.get(id);
-      const metaSpan = card?.querySelector(".ofov-meta span");
+      const metaSpan = state.metaEls.get(id);
       if (!g || !metaSpan) continue;
       const maxPlayers = g.gameConfig?.maxPlayers;
       metaSpan.textContent = `${g.numClients ?? 0}${maxPlayers != null ? "/" + maxPlayers : ""} 👥`;
@@ -404,8 +413,14 @@
          the identity bar's column (1fr) take the rest, both centered on the
          row's cross axis — items-stretch was the source of the original
          "everything stretches to match" bug, so replace it outright rather
-         than leaving it for the icon to fight too. */
-      div[class*="lg:has-[.streaming-live]:grid-cols-[2fr_1fr]"] {
+         than leaving it for the icon to fight too. The attribute selector
+         matches on the literal Tailwind class text, which is present
+         whether or not anyone is live — :has(.streaming-live) is what
+         actually restricts this to the live case, matching the native
+         rule it's overriding; without it, nobody streaming still forced
+         the two-column split against an empty second column, throwing
+         off the identity bar's alignment. */
+      div[class*="lg:has-[.streaming-live]:grid-cols-[2fr_1fr]"]:has(.streaming-live) {
         grid-template-columns: 1fr auto !important;
         align-items: center !important;
       }
