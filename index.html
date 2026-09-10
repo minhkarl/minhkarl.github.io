@@ -233,10 +233,46 @@
       </div>
     </div>
 
+    <div id="updatePopupBackdrop" class="updatePopupBackdrop" hidden>
+      <div
+        id="updatePopup"
+        class="updatePopup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="updatePopupTitle"
+      >
+        <button id="updatePopupClose" class="updatePopupClose" type="button" aria-label="Close">✕</button>
+        <div class="updatePopupTitle" id="updatePopupTitle">Thank you 💙</div>
+        <div class="updatePopupBody">
+          Thanks for using this lobby browser. OpenFront's next update
+          (<code>v0.34.0-beta1</code>) ships a native "Detailed View" lobby
+          browser with filters, sorting, profiles and modifier badges — a lot
+          of what this site was built for. Here's what else is coming:
+        </div>
+        <ul class="updatePopupFeatures">
+          <li><strong>Detailed View lobby browser</strong> — every advertised lobby, tabbed by mode, filterable, deep-linkable</li>
+          <li><strong>Steam integration</strong> — sign in with Steam, link it to your account, desktop-shell support</li>
+          <li><strong>Guided tutorial</strong> — a 20-step walkthrough of spawn, attack, build, ally and nuke mechanics</li>
+          <li><strong>Trusted-only lobbies</strong> — hosts can restrict joining to trusted accounts</li>
+          <li><strong>Cosmetic locker + store redesign</strong> — a proper inventory for everything you own</li>
+          <li><strong>Attack rebalance</strong> — combat retuned around troop ratios and defender density</li>
+          <li><strong>Performance</strong> — −39% tick cost on a full 30k-tick World game</li>
+          <li><strong>New maps</strong> — Yangtze River, plus a modernized China (classic kept as Qing China)</li>
+          <li><strong>Clans</strong> — currency donations and clan tags as team names</li>
+          <li><strong>Player reporting</strong> — feeds into moderation tools</li>
+        </ul>
+        <div class="updatePopupBody updatePopupFooter">
+          It's been fun keeping this in sync with the game. See you out there. 🚩
+        </div>
+        <button id="updatePopupDismiss" class="updatePopupDismissBtn" type="button">Got it</button>
+      </div>
+    </div>
+
     <script src="extension-promo.js"></script>
 
     <script src="lobby-wire.js"></script>
     <script src="modifier-labels.js"></script>
     <script src="app.js"></script>
+    <script src="update-popup.js"></script>
   </body>
 </html>

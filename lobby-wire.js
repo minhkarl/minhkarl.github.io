@@ -26,7 +26,7 @@
 // Unknown enum ordinals (e.g. a newly added map) decode to "unknown#<n>"
 // instead of throwing, so a map addition alone doesn't kill the dashboard.
 //
-// Last synced against openfrontio/OpenFrontIO release v0.33.13.
+// Last synced against openfrontio/OpenFrontIO release v0.34.0-beta1.
 (function (global) {
   "use strict";
 
@@ -53,14 +53,15 @@
     "Middle East", "MilkyWay", "Mississippi River", "Montreal",
     "More Than Luck", "New York City", "Nile Delta", "North America",
     "Northwest Passage", "Oceania", "Onion", "Pangaea", "Passage", "Pluto",
-    "Russia", "San Francisco", "Scandinavia", "Sierpinski", "Sol",
+    "Qing China", "Russia", "San Francisco", "Scandinavia", "Sierpinski",
+    "Sol",
     "South America", "SoutheastAsia", "Strait of Gibraltar",
     "Strait of Hormuz", "Strait Of Malacca", "Surrounded", "Svalmel",
     "Taiwan Strait", "The Box", "Tierra Del Fuego", "Titan",
     "Tourney 2 Teams", "Tourney 3 Teams", "Tourney 4 Teams",
     "Tourney 8 Teams", "Traders Dream", "Two Lakes", "United States",
     "Venice", "Vietnam", "Warship Warship", "World", "World Inverted",
-    "Yellow Sea", "Yenisei",
+    "Yangtze River", "Yellow Sea", "Yenisei",
   ];
 
   // src/core/game/Game.ts
@@ -335,6 +336,7 @@
     f("randomSpawn", "bool"),
     f("maxPlayers", "uint", { opt: true }),
     f("allowedPublicIds", { arr: "str" }, { opt: true }),
+    f("trusted", "bool", { opt: true }),
     f("maxTimerValue", "uint", { opt: true, nul: true }),
     f("customAllianceDuration", "uint", { opt: true, nul: true }),
     f("startDelay", "uint", { opt: true, nul: true }),
@@ -374,6 +376,8 @@
     f("type", { const: "full" }),
     f("serverTime", "uint"),
     f("games", { recordEnum: PUBLIC_GAME_TYPE, val: { arr: PublicGameInfo } }),
+    f("gitCommit", "str", { opt: true }),
+    f("active", "bool", { opt: true }),
   ]);
 
   const PublicLobbyCounts = obj([
