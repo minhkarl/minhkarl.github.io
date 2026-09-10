@@ -26,7 +26,16 @@
 // Unknown enum ordinals (e.g. a newly added map) decode to "unknown#<n>"
 // instead of throwing, so a map addition alone doesn't kill the dashboard.
 //
-// Last synced against openfrontio/OpenFrontIO release v0.34.0-beta1.
+// Last synced against openfrontio/OpenFrontIO release v0.33.13.
+//
+// NOTE: v0.34.0-beta1 (released 2026-09-10) changes this wire shape — see
+// .github/workflows/resync-lobby-wire.yml — but production is still serving
+// the v0.33.13 shape as of this writing (verified against a live frame
+// capture: the v0.34 shape fails to decode real traffic, the shape below
+// decodes it cleanly). Do not re-apply the v0.34 field additions
+// (GameConfig.trusted, PublicLobbyFull.gitCommit/active) until production
+// actually redeploys — re-verify against a live frame first, don't trust the
+// release tag alone.
 (function (global) {
   "use strict";
 
@@ -53,15 +62,14 @@
     "Middle East", "MilkyWay", "Mississippi River", "Montreal",
     "More Than Luck", "New York City", "Nile Delta", "North America",
     "Northwest Passage", "Oceania", "Onion", "Pangaea", "Passage", "Pluto",
-    "Qing China", "Russia", "San Francisco", "Scandinavia", "Sierpinski",
-    "Sol",
+    "Russia", "San Francisco", "Scandinavia", "Sierpinski", "Sol",
     "South America", "SoutheastAsia", "Strait of Gibraltar",
     "Strait of Hormuz", "Strait Of Malacca", "Surrounded", "Svalmel",
     "Taiwan Strait", "The Box", "Tierra Del Fuego", "Titan",
     "Tourney 2 Teams", "Tourney 3 Teams", "Tourney 4 Teams",
     "Tourney 8 Teams", "Traders Dream", "Two Lakes", "United States",
     "Venice", "Vietnam", "Warship Warship", "World", "World Inverted",
-    "Yangtze River", "Yellow Sea", "Yenisei",
+    "Yellow Sea", "Yenisei",
   ];
 
   // src/core/game/Game.ts
@@ -336,7 +344,6 @@
     f("randomSpawn", "bool"),
     f("maxPlayers", "uint", { opt: true }),
     f("allowedPublicIds", { arr: "str" }, { opt: true }),
-    f("trusted", "bool", { opt: true }),
     f("maxTimerValue", "uint", { opt: true, nul: true }),
     f("customAllianceDuration", "uint", { opt: true, nul: true }),
     f("startDelay", "uint", { opt: true, nul: true }),
@@ -376,8 +383,6 @@
     f("type", { const: "full" }),
     f("serverTime", "uint"),
     f("games", { recordEnum: PUBLIC_GAME_TYPE, val: { arr: PublicGameInfo } }),
-    f("gitCommit", "str", { opt: true }),
-    f("active", "bool", { opt: true }),
   ]);
 
   const PublicLobbyCounts = obj([
