@@ -26,7 +26,7 @@
 // Unknown enum ordinals (e.g. a newly added map) decode to "unknown#<n>"
 // instead of throwing, so a map addition alone doesn't kill the dashboard.
 //
-// Last synced against openfrontio/OpenFrontIO release v0.33.13.
+// Last synced against openfrontio/OpenFrontIO release v0.34.0-beta2.
 //
 // NOTE: v0.34.0-beta1 (released 2026-09-10) changes this wire shape — see
 // .github/workflows/resync-lobby-wire.yml — but production is still serving
@@ -48,28 +48,28 @@
     "Baikal Nuke Wars", "Baja California", "Balkans", "Balkhash", "Baltics",
     "Bering Sea", "Bering Strait", "Between Two Seas", "Black Sea",
     "Bosphorus Straits", "Branching Paths", "Britannia", "Britannia Classic",
-    "Caribbean", "Caspian Sea", "Caucasus", "China", "Chopping Block",
-    "Clearwater Lakes", "Conakry", "Crimea", "Danish Straits",
-    "Deglaciated Antarctica", "Didier", "Didier France", "Dyslexdria",
-    "East Asia", "Europe", "Europe Classic", "Falkland Islands",
-    "Faroe Islands", "Finger Lakes", "Four Islands", "France",
-    "Gateway to the Atlantic", "Germany", "Giant World Map", "Great Lakes",
-    "Gulf Of Guinea", "Gulf of St. Lawrence", "Halkidiki", "Hawaii",
-    "Hecate Strait", "Hong Kong", "Iceland", "Indian Subcontinent",
+    "Caribbean", "Caspian Sea", "Caucasus", "Central America", "China",
+    "Chopping Block", "Clearwater Lakes", "Conakry", "Crimea",
+    "Danish Straits", "Deglaciated Antarctica", "Didier", "Didier France",
+    "Dyslexdria", "East Asia", "Europe", "Europe Classic",
+    "Falkland Islands", "Faroe Islands", "Finger Lakes", "Four Islands",
+    "France", "Gateway to the Atlantic", "Germany", "Giant World Map",
+    "Great Lakes", "Gulf Of Guinea", "Gulf of St. Lawrence", "Halkidiki",
+    "Hawaii", "Hecate Strait", "Hong Kong", "Iceland", "Indian Subcontinent",
     "Irish Sea", "Italia", "Japan", "Juan De Fuca Strait", "Korea",
     "Labyrinth", "Las Vegas Strip", "Lemnos", "Levant", "Lisbon",
     "Los Angeles", "Luna", "Manicouagan", "Mare Nostrum", "Mars", "Mena",
     "Middle East", "MilkyWay", "Mississippi River", "Montreal",
     "More Than Luck", "New York City", "Nile Delta", "North America",
     "Northwest Passage", "Oceania", "Onion", "Pangaea", "Passage", "Pluto",
-    "Russia", "San Francisco", "Scandinavia", "Sierpinski", "Sol",
-    "South America", "SoutheastAsia", "Strait of Gibraltar",
+    "Qing China", "Russia", "San Francisco", "Scandinavia", "Sierpinski",
+    "Sol", "South America", "SoutheastAsia", "Strait of Gibraltar",
     "Strait of Hormuz", "Strait Of Malacca", "Surrounded", "Svalmel",
     "Taiwan Strait", "The Box", "Tierra Del Fuego", "Titan",
     "Tourney 2 Teams", "Tourney 3 Teams", "Tourney 4 Teams",
     "Tourney 8 Teams", "Traders Dream", "Two Lakes", "United States",
     "Venice", "Vietnam", "Warship Warship", "World", "World Inverted",
-    "Yellow Sea", "Yenisei",
+    "Yangtze River", "Yellow Sea", "Yenisei",
   ];
 
   // src/core/game/Game.ts
