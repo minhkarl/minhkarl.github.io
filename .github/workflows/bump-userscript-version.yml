@@ -1,13 +1,13 @@
 name: Bump userscript version
 
 # Tampermonkey only re-fetches openfront-lobby-overlay.user.js's @require'd
-# dependencies (lobby-wire.js, modifier-labels.js) when the userscript's own
-# @version changes — there's no independent refresh schedule for @require
-# content. This keeps that version incrementing automatically whenever the
-# script or any of its dependencies change on main, regardless of what pushed
-# the change (a human edit, the resync-lobby-wire.yml automation, etc.) —
-# without this, a fix could land in the repo and simply never reach anyone
-# who already has the script installed.
+# dependencies (lobby-wire.js, modifier-labels.js, lobby-filters.js) when the
+# userscript's own @version changes — there's no independent refresh schedule
+# for @require content. This keeps that version incrementing automatically
+# whenever the script or any of its dependencies change on main, regardless
+# of what pushed the change (a human edit, the resync-lobby-wire.yml
+# automation, etc.) — without this, a fix could land in the repo and simply
+# never reach anyone who already has the script installed.
 
 on:
   push:
@@ -16,6 +16,7 @@ on:
       - "openfront-lobby-overlay.user.js"
       - "lobby-wire.js"
       - "modifier-labels.js"
+      - "lobby-filters.js"
 
 permissions:
   contents: write
