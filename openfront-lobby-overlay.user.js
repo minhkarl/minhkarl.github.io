@@ -129,6 +129,20 @@
     return RANK_COLORS[String(name || "").toLowerCase()] || "#4f9eff";
   }
 
+  // trackerfront.com's own rank-tier icons — plain <img> hotlinking, unlike
+  // its JSON API, needs no GM_xmlhttpRequest workaround at all: an <img src>
+  // isn't subject to CORS the way fetch/XHR reads are. "platinium" is their
+  // own asset filename typo (confirmed live 2026-09-21), not ours to fix.
+  const TF_ASSET_BASE = "https://trackerfront.com/asset";
+  const RANK_ASSET_NAMES = {
+    iron: "iron", bronze: "bronze", silver: "silver", gold: "gold",
+    platinum: "platinium", diamond: "diamond", master: "master", challenger: "challenger",
+  };
+  function rankIconUrl(name) {
+    const key = RANK_ASSET_NAMES[String(name || "").toLowerCase()];
+    return key ? `${TF_ASSET_BASE}/${key}.svg` : null;
+  }
+
   // UsernameInput.ts (openfrontio/OpenFrontIO) persists the chosen name to
   // this exact localStorage key — verified 2026-09-20 against main. Doesn't
   // account for the "use verified name" override showing a different display
@@ -186,7 +200,7 @@
   // A plain inline-SVG polyline instead of a charting library — a userscript
   // has no bundler step to pull one in through, and a handful of RR points
   // doesn't need more than this.
-  function sparklineSvg(history) {
+  function sparklineSvg(history, color) {
     const points = (history || []).map((h) => h?.rank?.rr).filter((v) => typeof v === "number");
     if (points.length < 2) return "";
     const w = 100, h = 28;
@@ -196,16 +210,61 @@
     const path = points
       .map((v, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`)
       .join(" ");
-    return `<svg class="ofov-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${path}"></path></svg>`;
+    // A `style` attribute, not the `stroke` presentation attribute — a plain
+    // SVG presentation attribute loses to .ofov-sparkline path's own stroke
+    // rule in the stylesheet regardless of source order, so this is the only
+    // way to actually get the current rank's color onto the line.
+    return `<svg class="ofov-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${path}" style="stroke:${color}"></path></svg>`;
   }
 
+  function formatShortDate(iso) {
+    const d = iso ? new Date(iso) : null;
+    if (!d || Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  // Small per-opponent rank-tier icons, truncated with a "+N" like
+  // trackerfront's own recent-games list — tracked_ranks is every tracked
+  // player's rank in that particular game, not just the two people shown.
+  const MAX_TRACKED_ICONS = 6;
+  function trackedRanksHtml(tracked) {
+    if (!Array.isArray(tracked) || tracked.length === 0) return "";
+    const shown = tracked.slice(0, MAX_TRACKED_ICONS);
+    const extra = tracked.length - shown.length;
+    const icons = shown
+      .map((t) => {
+        const url = rankIconUrl(t?.name);
+        return url
+          ? `<img class="ofov-tfTrackedIcon" src="${url}" alt="" title="${escapeHtml(t.name || "")}" loading="lazy">`
+          : "";
+      })
+      .join("");
+    const extraHtml = extra > 0 ? `<span class="ofov-tfTrackedExtra">+${extra}</span>` : "";
+    return `<div class="ofov-tfTracked">${icons}${extraHtml}</div>`;
+  }
+
+  // Blends trackerfront's own two "recent games" layouts: a map thumbnail
+  // and win/loss framing like its game-history cards, in the single compact
+  // row its player-profile list actually uses (a full card per game is too
+  // tall to show more than one in this sidebar).
   function trackerGameRowHtml(g) {
     const delta = typeof g.rr_delta === "number" ? `${g.rr_delta >= 0 ? "+" : ""}${g.rr_delta.toFixed(1)}` : "";
+    const sub = [g.game_mode, g.num_players != null ? `${g.num_players}P` : null].filter(Boolean).join(" · ");
     return `
       <div class="ofov-tfGame ${g.won ? "ofov-tfWin" : "ofov-tfLoss"}">
-        <span class="ofov-tfResult">${g.won ? "W" : "L"}</span>
-        <span class="ofov-tfMap">${escapeHtml(g.game_map || "—")}</span>
-        <span class="ofov-tfDelta">${escapeHtml(delta)}</span>
+        <img class="ofov-tfGameThumb" src="${getMapThumbnailUrl(g.game_map)}" alt="" loading="lazy" onerror="this.style.visibility='hidden';">
+        <div class="ofov-tfGameBody">
+          <div class="ofov-tfGameTop">
+            <span class="ofov-tfMap">${escapeHtml(g.game_map || "—")}</span>
+            <span class="ofov-tfDelta">${escapeHtml(delta)}</span>
+          </div>
+          <div class="ofov-tfGameSub">
+            <span class="ofov-tfResultTag">${g.won ? "W" : "L"}</span>
+            <span class="ofov-tfGameSubText">${escapeHtml(sub)}</span>
+            <span class="ofov-tfGameDate">${escapeHtml(formatShortDate(g.played_at))}</span>
+          </div>
+          ${trackedRanksHtml(g.tracked_ranks)}
+        </div>
       </div>
     `;
   }
@@ -224,7 +283,9 @@
     const { profile, games, streak, history } = data;
     const rank = profile.rank || {};
     const rankName = (rank.name || "unranked").toUpperCase();
-    const rr = typeof rank.rr === "number" ? rank.rr.toFixed(1) : "—";
+    const color = rankColor(rank.name);
+    const rr = typeof rank.rr === "number" ? Math.max(0, Math.min(100, rank.rr)) : null;
+    const rankIcon = rankIconUrl(rank.name);
     const streakHtml =
       streak && streak.count >= 2
         ? `<div class="ofov-tfStreak ${streak.won ? "ofov-tfWin" : "ofov-tfLoss"}">${streak.won ? "🔥" : "❄️"} ${streak.count} ${streak.won ? "win" : "loss"} streak</div>`
@@ -233,12 +294,16 @@
 
     return `
       <div class="ofov-tfHeader">
-        <span class="ofov-tfRankBadge" style="background:${rankColor(rank.name)}">${escapeHtml(rankName)}</span>
+        ${rankIcon ? `<img class="ofov-tfRankIcon" src="${rankIcon}" alt="">` : ""}
+        <span class="ofov-tfRankBadge" style="background:${color}">${escapeHtml(rankName)}</span>
         ${profile.verified ? `<span class="ofov-tfVerified" title="Verified">✓</span>` : ""}
         ${profile.clan_tag ? `<span class="ofov-tfClan">[${escapeHtml(profile.clan_tag)}]</span>` : ""}
       </div>
-      <div class="ofov-tfRR">RR ${escapeHtml(rr)}<span class="ofov-tfRRMax">/100</span></div>
-      ${sparklineSvg(history)}
+      <div class="ofov-tfRRRow">
+        <div class="ofov-tfRRBarTrack"><div class="ofov-tfRRBarFill" style="width:${rr ?? 0}%; background:${color}"></div></div>
+        <div class="ofov-tfRR">${rr != null ? rr.toFixed(1) : "—"}<span class="ofov-tfRRMax">/100</span></div>
+      </div>
+      ${sparklineSvg(history, color)}
       <div class="ofov-tfMeta">Global rank <strong>#${profile.global_position ?? "—"}</strong> / ${profile.total_ranked ?? "—"}</div>
       <div class="ofov-tfMeta">${profile.games_scored ?? 0} scored games</div>
       ${streakHtml}
@@ -264,6 +329,71 @@
     refreshTrackerFrontPanel(bodyEl);
     setInterval(() => refreshTrackerFrontPanel(bodyEl), TF_REFRESH_MS);
     refreshBtn?.addEventListener("click", () => refreshTrackerFrontPanel(bodyEl));
+  }
+
+  // --- OpenFront's own ranked (1v1/2v2) ELO. There is no public API for it
+  // — it only ever reaches the page as the detail of a "userMeResponse"
+  // document event, broadcast (Main.ts) after an authenticated /users/@me
+  // call this script has no way to make itself (the JWT it needs lives in
+  // an in-memory closure inside OpenFront's own auth module, never in
+  // localStorage/cookies). <ranked-modal> listens for that same event and
+  // computes its own `elo`/`elo2v2` fields from it to feed its own display —
+  // and since TypeScript's `private`/@state() decorators are compile-time
+  // only, those fields are exactly as readable from here as they are from
+  // inside that component. This never touches the token; it just reads the
+  // same broadcast (and the same component) OpenFront's own ranked UI does. ---
+  const rankedElo = { oneVOne: null, twoVTwo: null };
+
+  function readRankedEloFromModal() {
+    const modal = document.querySelector("ranked-modal");
+    if (!modal) return;
+    const usable = (v) => typeof v === "number" || (typeof v === "string" && v && v !== "...");
+    if (usable(modal.elo)) rankedElo.oneVOne = modal.elo;
+    if (usable(modal.elo2v2)) rankedElo.twoVTwo = modal.elo2v2;
+    renderRankedElo();
+  }
+
+  function rankedEloHtml() {
+    if (rankedElo.oneVOne == null && rankedElo.twoVTwo == null) {
+      return `<div class="ofov-tfEmpty">Opens once you visit Ranked this session.</div>`;
+    }
+    const row = (label, value) =>
+      `<div class="ofov-rankedRow"><span>${label}</span><strong>${escapeHtml(String(value ?? "—"))}</strong></div>`;
+    return row("1v1", rankedElo.oneVOne) + row("2v2", rankedElo.twoVTwo);
+  }
+
+  function renderRankedElo() {
+    const el = document.getElementById("ofov-rankedElo");
+    if (el) el.innerHTML = rankedEloHtml();
+  }
+
+  function initRankedElo() {
+    // RankedModal.ts's own listener for this same event is registered long
+    // before ours (it's a page-level element mounted at boot; this script
+    // runs at document-idle), so by the time our handler runs in the same
+    // dispatch its `elo`/`elo2v2` are already updated — read straight away.
+    document.addEventListener("userMeResponse", readRankedEloFromModal);
+    // Covers the case where that event already fired (player already
+    // signed in) before this script attached its own listener.
+    readRankedEloFromModal();
+  }
+
+  // <play-page>'s identity row: flag + username + "use verified" + skin.
+  // Moved into the left sidebar's own slot (see mount()) instead of staying
+  // above the lobby grid — the same DOM node, just relocated, not rebuilt,
+  // so none of its own state/behavior changes. Retried like
+  // relocateFooter/relocateNewsBox since neither the identity row nor the
+  // sidebar are guaranteed to exist in the same tick.
+  function relocateIdentityBar(attemptsLeft = 15) {
+    const identityRow = document.querySelector('div[class*="sm:min-h-[60px]"]');
+    const slot = document.getElementById("ofov-identitySlot");
+    if (!identityRow || !slot) {
+      if (attemptsLeft > 0) setTimeout(() => relocateIdentityBar(attemptsLeft - 1), 300);
+      return;
+    }
+    if (identityRow.classList.contains("ofov-identityRelocated")) return;
+    identityRow.classList.add("ofov-identityRelocated");
+    slot.appendChild(identityRow);
   }
 
   const state = {
@@ -1549,7 +1679,9 @@
       }
       .ofov-actionBtn:hover { filter: brightness(1.15); transform: scale(1.02); }
       .ofov-actionBtn:active { transform: scale(0.98); }
-      .ofov-solo { background: #4f9eff; }
+      /* Solo intentionally matches Create/Ranked's plain dark styling now
+         (OpenFront's own native row gives Solo a distinct accent color —
+         this overlay's own action row reads better with all three uniform). */
       #ofov-filtersToggle[aria-expanded="true"] { background: #4f9eff; }
 
       /* Same height as .ofov-actionBtn (2.2rem = 0.4rem padding + 0.68rem
@@ -1616,11 +1748,51 @@
         display: flex; align-items: center; justify-content: center; flex-shrink: 0;
       }
       .ofov-iconBtn:hover { filter: brightness(1.3); }
-      .ofov-sidePanelBody { padding: 0.65rem; overflow-y: auto; }
+      /* flex:1 (not the implicit flex:0 1 auto a plain block would get)
+         is what actually lets this fill whatever's left under the header/
+         identity/ranked sections and scroll within that instead of the
+         panel's own overflow:hidden silently clipping it. */
+      .ofov-sidePanelBody { flex: 1 1 auto; min-height: 0; padding: 0.65rem; overflow-y: auto; }
+
+      /* The relocated flag/username/verified row (see relocateIdentityBar)
+         — its own Tailwind classes assume the wide top-strip row it used to
+         sit in, which a ~14rem sidebar can't give it, so its layout is
+         forced into a plain vertical stack here regardless of what those
+         classes say. Best-effort: this component's internal shadow-DOM-free
+         markup wasn't designed for this width, so it may still need a
+         follow-up tweak once seen live. */
+      .ofov-identitySlot {
+        padding: 0.6rem 0.6rem 0; flex-shrink: 0;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+      }
+      .ofov-identitySlot > div {
+        display: flex !important; flex-direction: column !important;
+        align-items: stretch !important; gap: 0.4rem !important;
+        width: 100% !important; height: auto !important;
+        min-height: 0 !important; max-height: none !important;
+      }
+      .ofov-identitySlot flag-input,
+      .ofov-identitySlot username-input,
+      .ofov-identitySlot cosmetics-input {
+        width: 100% !important; max-width: none !important;
+        height: auto !important; max-height: none !important;
+      }
+
+      .ofov-rankedSection {
+        padding: 0.6rem 0.65rem; flex-shrink: 0;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+      }
+      .ofov-rankedSection .ofov-modSectionLabel { margin: 0 0 0.3rem; }
+      .ofov-rankedRow {
+        display: flex; align-items: center; justify-content: space-between;
+        font-size: var(--ofov-fs-sm); color: rgba(255,255,255,0.7); padding: 0.1rem 0;
+      }
+      .ofov-rankedRow strong { color: #fff; font-weight: var(--ofov-fw-bold); }
 
       /* --- TrackerFront profile/stats panel --- */
       .ofov-tfEmpty { color: rgba(255,255,255,0.45); font-size: var(--ofov-fs-sm); line-height: 1.4; }
       .ofov-tfHeader { display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.35rem; }
+      .ofov-tfRankIcon { width: 1.1rem; height: 1.1rem; flex-shrink: 0; }
       .ofov-tfRankBadge {
         color: #06120f; font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-bold);
         text-transform: uppercase; letter-spacing: 0.04em;
@@ -1628,33 +1800,57 @@
       }
       .ofov-tfVerified { color: #4ade80; font-weight: var(--ofov-fw-bold); font-size: var(--ofov-fs-md); }
       .ofov-tfClan { color: rgba(255,255,255,0.5); font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-bold); }
-      .ofov-tfRR { color: #fff; font-size: var(--ofov-fs-xl); font-weight: var(--ofov-fw-black); }
+      .ofov-tfRRRow { display: flex; align-items: center; gap: 0.4rem; }
+      .ofov-tfRRBarTrack {
+        flex: 1 1 auto; height: 0.4rem; background: rgba(255,255,255,0.12);
+        border-radius: var(--ofov-radius-full); overflow: hidden;
+      }
+      .ofov-tfRRBarFill { height: 100%; border-radius: var(--ofov-radius-full); transition: width 300ms ease; }
+      .ofov-tfRR { flex-shrink: 0; color: #fff; font-size: var(--ofov-fs-md); font-weight: var(--ofov-fw-bold); }
       .ofov-tfRRMax { color: rgba(255,255,255,0.4); font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-regular); }
       .ofov-sparkline { width: 100%; height: 1.75rem; margin: 0.3rem 0; display: block; }
-      .ofov-sparkline path { fill: none; stroke: #4f9eff; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+      .ofov-sparkline path { fill: none; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
       .ofov-tfMeta { color: rgba(255,255,255,0.6); font-size: var(--ofov-fs-sm); margin-top: 0.15rem; }
       .ofov-tfMeta strong { color: #fff; }
       .ofov-tfStreak { font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold); margin-top: 0.4rem; }
       .ofov-tfStreak.ofov-tfWin { color: #4ade80; }
       .ofov-tfStreak.ofov-tfLoss { color: #f87171; }
-      .ofov-tfGames { display: flex; flex-direction: column; gap: 0.3rem; }
+      .ofov-tfGames { display: flex; flex-direction: column; gap: 0.4rem; }
       .ofov-tfGame {
-        display: flex; align-items: center; gap: 0.35rem;
+        display: flex; align-items: flex-start; gap: 0.5rem;
         background: #0d1017; border: 1px solid rgba(255,255,255,0.08);
-        border-radius: var(--ofov-radius-btn); padding: 0.3rem 0.4rem; font-size: var(--ofov-fs-sm);
+        border-left: 3px solid transparent;
+        border-radius: var(--ofov-radius-btn); padding: 0.4rem; font-size: var(--ofov-fs-sm);
       }
-      .ofov-tfResult {
-        flex-shrink: 0; width: 1.1rem; height: 1.1rem; border-radius: var(--ofov-radius-badge);
+      .ofov-tfGame.ofov-tfWin { border-left-color: #4ade80; }
+      .ofov-tfGame.ofov-tfLoss { border-left-color: #f87171; }
+      .ofov-tfGameThumb {
+        width: 2rem; height: 2rem; flex-shrink: 0; object-fit: cover;
+        border-radius: 0.3rem; background: rgba(255,255,255,0.08);
+      }
+      .ofov-tfGameBody { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+      .ofov-tfGameTop { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
+      .ofov-tfGameSub {
+        display: flex; align-items: center; gap: 0.3rem;
+        color: rgba(255,255,255,0.55); font-size: var(--ofov-fs-xs);
+      }
+      .ofov-tfGameSubText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ofov-tfGameDate { margin-left: auto; flex-shrink: 0; }
+      .ofov-tfResultTag {
+        flex-shrink: 0; width: 1rem; height: 1rem; border-radius: var(--ofov-radius-badge);
         display: flex; align-items: center; justify-content: center;
         font-weight: var(--ofov-fw-bold); font-size: var(--ofov-fs-xs); color: #06120f;
       }
-      .ofov-tfGame.ofov-tfWin .ofov-tfResult { background: #4ade80; }
-      .ofov-tfGame.ofov-tfLoss .ofov-tfResult { background: #f87171; }
+      .ofov-tfGame.ofov-tfWin .ofov-tfResultTag { background: #4ade80; }
+      .ofov-tfGame.ofov-tfLoss .ofov-tfResultTag { background: #f87171; }
       .ofov-tfMap {
-        flex: 1 1 auto; min-width: 0; color: rgba(255,255,255,0.75);
+        flex: 1 1 auto; min-width: 0; color: #fff; font-weight: var(--ofov-fw-bold);
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       .ofov-tfDelta { flex-shrink: 0; color: rgba(255,255,255,0.5); font-weight: var(--ofov-fw-bold); }
+      .ofov-tfTracked { display: flex; align-items: center; gap: 0.15rem; margin-top: 0.15rem; flex-wrap: wrap; }
+      .ofov-tfTrackedIcon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
+      .ofov-tfTrackedExtra { font-size: var(--ofov-fs-xs); color: rgba(255,255,255,0.4); margin-left: 0.1rem; }
 
       .ofov-filtersRow {
         display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; align-items: flex-start;
@@ -1752,7 +1948,18 @@
   const ACTIONS = {
     solo: () => document.querySelector("single-player-modal")?.open(),
     create: () => document.querySelector("host-lobby-modal")?.open(),
-    ranked: () => window.showPage?.("page-ranked"),
+    // window.showPage?.("page-ranked") looks equivalent to the native
+    // handler but skips its own gating (GameModeSelector.ts's
+    // openRankedMenu checks shouldBlockMultiplayerAction and
+    // validateUsername first) — clicking the real button instead (still in
+    // the DOM, just CSS-hidden) guarantees identical behavior to the actual
+    // Ranked card, including whatever that gating decides. It's the middle
+    // of the three buttons in the create/ranked/join row (verified against
+    // GameModeSelector.ts's render(), 2026-09-21).
+    ranked: () => {
+      const buttons = document.querySelectorAll("game-mode-selector div.grid.grid-cols-3 button");
+      buttons[1]?.click();
+    },
   };
 
   function mount(gms) {
@@ -1767,6 +1974,11 @@
               <button type="button" id="ofov-tfRefresh" class="ofov-iconBtn" title="Refresh stats">⟳</button>
               <button type="button" id="ofov-leftCollapse" class="ofov-iconBtn" aria-expanded="true" title="Collapse">‹</button>
             </div>
+          </div>
+          <div id="ofov-identitySlot" class="ofov-identitySlot"></div>
+          <div class="ofov-rankedSection">
+            <div class="ofov-modSectionLabel">Ranked ELO</div>
+            <div id="ofov-rankedElo">${rankedEloHtml()}</div>
           </div>
           <div id="ofov-tfBody" class="ofov-sidePanelBody"></div>
         </aside>
@@ -2028,6 +2240,8 @@
     mount(gms);
     relocateNewsBox();
     relocateFooter();
+    relocateIdentityBar();
+    initRankedElo();
     connect();
     setInterval(tickTimers, 1000);
     setTimeout(() => verifyIntegration(gms), 1000);
