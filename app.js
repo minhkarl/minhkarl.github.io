@@ -420,6 +420,11 @@
         reconnectAttempts: 0,
         unknownCountFrames: 0,
         manualDisconnect: false,
+        // Set once repeated reconnects suggest this site structurally can't
+        // connect any more (see GIVE_UP_AFTER_ATTEMPTS) — cleared on the next
+        // successful open, so it isn't stuck permanently if the underlying
+        // block is ever lifted.
+        unavailableShown: false,
 
         view:
           localStorage.getItem("openfrontLobbyView") === "table"
@@ -1752,16 +1757,52 @@
         try { ws.close(); } catch {}
       }
       
+      // OpenFront now restricts both its lobby-discovery API and the lobby
+      // WebSocket itself to connections that originate from openfront.io
+      // (confirmed 2026-09-20: cluster.json answers other origins with a
+      // CORS-rejecting Access-Control-Allow-Origin, and the direct-connect
+      // fallback below it fails identically on every worker from this site's
+      // own origin) — this site structurally cannot receive live lobby data
+      // any more, independent of anything wrong with the code. Rather than
+      // spin "Reconnecting…" forever with an empty grid, give up visibly
+      // after a few attempts and point people at the overlay extension,
+      // which runs on openfront.io itself and is unaffected.
+      const GIVE_UP_AFTER_ATTEMPTS = 4;
+      const EXTENSION_INSTALL_URL =
+        "https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js";
+
+      function showConnectionUnavailableNotice() {
+        if (state.unavailableShown) return;
+        state.unavailableShown = true;
+
+        els.cardGrid.innerHTML = `
+          <div class="cardEmpty mono" style="max-width:480px;margin:0 auto;">
+            <div style="font-size:15px;font-weight:800;color:#fff;margin-bottom:8px;">Live data isn't available here any more</div>
+            <div style="margin-bottom:16px;line-height:1.5;">
+              OpenFront now restricts its lobby feed to openfront.io itself, so this page can't connect directly any more. Install the browser extension to get these lobby cards inside openfront.io's own lobby picker instead.
+            </div>
+            <a class="extensionPromoInstallBtn" href="${EXTENSION_INSTALL_URL}" target="_blank" rel="noreferrer" style="display:inline-block;width:auto;padding-left:20px;padding-right:20px;">Install the overlay extension</a>
+          </div>
+        `;
+        els.tableRows.innerHTML = `
+          <tr><td colspan="9" class="mono">Live data isn't available here any more —
+            <a href="${EXTENSION_INSTALL_URL}" target="_blank" rel="noreferrer" style="color:var(--accent)">install the overlay extension</a>
+            to use it on openfront.io directly.
+          </td></tr>
+        `;
+      }
+
       function scheduleReconnect(reason = "Reconnecting") {
         if (state.manualDisconnect) return;
         if (state.reconnectTimer) return;
-      
+
         const attempts = Math.min(state.reconnectAttempts, 8);
         const delay = Math.min(30000, 1000 * Math.pow(1.8, attempts));
-      
+
         state.reconnectAttempts += 1;
+        if (state.reconnectAttempts >= GIVE_UP_AFTER_ATTEMPTS) showConnectionUnavailableNotice();
         setStatus(`${reason} in ${Math.max(1, Math.round(delay / 1000))}s…`, "is-connecting");
-      
+
         state.reconnectTimer = setTimeout(() => {
           state.reconnectTimer = null;
           connect();
@@ -1936,6 +1977,7 @@
           }
 
           state.reconnectAttempts = 0;
+          state.unavailableShown = false;
           state.lastMessageAt = Date.now();
           setStatus("Live", "is-live");
           startStaleWatch();
