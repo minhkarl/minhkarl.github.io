@@ -396,18 +396,90 @@
     return filters.map((f) => `<div class="ofov-modBox"><div class="ofov-modTitle">${escapeHtml(f.label)}</div>${triButtonGroup(f.id)}</div>`).join("");
   }
 
+  // --- Compact multi-select dropdown: a trigger button showing a summary,
+  // and a popover list of checkable rows — click a row to toggle it, no
+  // ctrl/cmd needed. Mirrors index.html's own custom-select widget so the
+  // interaction feels the same in both places, without pulling in its
+  // DOM-specific implementation. ---
+
+  function summarizeMultiSelect(options, selected, emptyLabel) {
+    if (selected.size === 0) return emptyLabel;
+    if (selected.size <= 2) {
+      return options.filter((o) => selected.has(o.value)).map((o) => o.label).join(", ");
+    }
+    return `${selected.size} selected`;
+  }
+
+  function multiSelectItemsHtml(options, selected) {
+    return options
+      .map(
+        (o) =>
+          `<label class="ofov-msItem"><input type="checkbox" value="${escapeHtml(o.value)}"${selected.has(o.value) ? " checked" : ""}><span>${escapeHtml(o.label)}</span></label>`,
+      )
+      .join("");
+  }
+
+  function multiSelectDropdownHtml(id, options, selected, emptyLabel) {
+    return `
+      <div class="ofov-msDropdown" id="${id}">
+        <button type="button" class="ofov-msTrigger" aria-expanded="false">${escapeHtml(summarizeMultiSelect(options, selected, emptyLabel))}</button>
+        <div class="ofov-msList" hidden>${multiSelectItemsHtml(options, selected)}</div>
+      </div>
+    `;
+  }
+
+  function getMultiSelectChecked(container) {
+    return Array.from(container.querySelectorAll('.ofov-msList input[type="checkbox"]:checked')).map((c) => c.value);
+  }
+
+  // Wires one dropdown's open/close and change behavior. onChange receives
+  // the newly-checked values; the caller decides what that means (a plain
+  // filter field vs. the profile-activation flow, which needs more than
+  // just recording the selection).
+  function wireMultiSelectDropdown(panel, id, { onChange, emptyLabel = "All" } = {}) {
+    const container = panel.querySelector(`#${id}`);
+    if (!container) return;
+    const trigger = container.querySelector(".ofov-msTrigger");
+    const list = container.querySelector(".ofov-msList");
+
+    trigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = list.hidden;
+      // Only one dropdown open at a time within this panel.
+      panel.querySelectorAll(".ofov-msList").forEach((l) => { if (l !== list) l.hidden = true; });
+      panel.querySelectorAll(".ofov-msTrigger").forEach((t) => { if (t !== trigger) t.setAttribute("aria-expanded", "false"); });
+      list.hidden = !willOpen;
+      trigger.setAttribute("aria-expanded", String(willOpen));
+    });
+
+    list.addEventListener("change", () => {
+      const options = Array.from(list.querySelectorAll("label")).map((lbl) => ({
+        value: lbl.querySelector("input").value,
+        label: lbl.querySelector("span")?.textContent ?? "",
+      }));
+      const selected = new Set(getMultiSelectChecked(container));
+      trigger.textContent = summarizeMultiSelect(options, selected, emptyLabel);
+      onChange?.(Array.from(selected));
+    });
+  }
+
   function buildFiltersPanelHtml() {
     const f = state.filters;
-    const teamOptionsHtml = TEAM_FILTER_OPTIONS.map(
-      (o) => `<option value="${o.value}"${f.teamFilters.includes(o.value) || (f.teamFilters.length === 0 && o.value === "any") ? " selected" : ""}>${escapeHtml(o.label)}</option>`,
-    ).join("");
     const sortOptionsHtml = SORT_OPTIONS.map(
       (o) => `<option value="${o.value}"${f.sort === o.value ? " selected" : ""}>${escapeHtml(o.label)}</option>`,
     ).join("");
-    const selectedMaps = new Set(f.maps || []);
-    const mapOptionsHtml = getKnownMaps()
-      .map((m) => `<option value="${escapeHtml(m)}"${selectedMaps.has(m) ? " selected" : ""}>${escapeHtml(m)}</option>`)
-      .join("");
+    const teamsDropdownHtml = multiSelectDropdownHtml(
+      "ofov-f-teams",
+      TEAM_FILTER_OPTIONS.filter((o) => o.value !== "any"),
+      new Set(f.teamFilters),
+      "All",
+    );
+    const mapsDropdownHtml = multiSelectDropdownHtml(
+      "ofov-f-maps",
+      getKnownMaps().map((m) => ({ value: m, label: m })),
+      new Set(f.maps || []),
+      "All maps",
+    );
 
     return `
       <div class="ofov-filtersRow">
@@ -435,12 +507,12 @@
 
       <div class="ofov-filtersRow">
         <div class="ofov-field ofov-fieldGrow">
-          <label>Teams (ctrl/cmd-click for multiple)</label>
-          <select id="ofov-f-teams" multiple size="3">${teamOptionsHtml}</select>
+          <label>Teams</label>
+          ${teamsDropdownHtml}
         </div>
         <div class="ofov-field ofov-fieldGrow">
-          <label>Map (ctrl/cmd-click for multiple)</label>
-          <select id="ofov-f-maps" multiple size="3">${mapOptionsHtml}</select>
+          <label>Map</label>
+          ${mapsDropdownHtml}
         </div>
       </div>
 
@@ -467,7 +539,7 @@
       <div class="ofov-modSectionLabel">Profiles</div>
       <div class="ofov-filtersRow">
         <div class="ofov-field ofov-fieldGrow"><label>Profile name</label><input id="ofov-f-profileName" type="text" placeholder="e.g. Big team games"></div>
-        <div class="ofov-field ofov-fieldGrow"><label>Active profiles (ctrl/cmd-click for multiple)</label><select id="ofov-f-profileSelect" multiple size="3"></select></div>
+        <div class="ofov-field ofov-fieldGrow"><label>Active profiles</label>${multiSelectDropdownHtml("ofov-f-profileSelect", [], state.activeProfiles, "Manual filters")}</div>
         <div class="ofov-field"><label>&nbsp;</label><button type="button" id="ofov-f-profileSave" class="ofov-smallBtn">Save</button></div>
         <div class="ofov-field"><label>&nbsp;</label><button type="button" id="ofov-f-profileDelete" class="ofov-smallBtn">Delete</button></div>
       </div>
@@ -476,12 +548,10 @@
 
   function readFiltersFromForm(panel) {
     const val = (id) => panel.querySelector(`#${id}`)?.value;
-    const teamsSelect = panel.querySelector("#ofov-f-teams");
-    const teamFilters = teamsSelect
-      ? Array.from(teamsSelect.selectedOptions).map((o) => o.value).filter((v) => v !== "any")
-      : [];
-    const mapsSelect = panel.querySelector("#ofov-f-maps");
-    const maps = mapsSelect ? Array.from(mapsSelect.selectedOptions).map((o) => o.value) : [];
+    const teamsContainer = panel.querySelector("#ofov-f-teams");
+    const teamFilters = teamsContainer ? getMultiSelectChecked(teamsContainer) : [];
+    const mapsContainer = panel.querySelector("#ofov-f-maps");
+    const maps = mapsContainer ? getMultiSelectChecked(mapsContainer) : [];
 
     return {
       type: val("ofov-f-type") || "all",
@@ -507,20 +577,27 @@
     state.activeProfiles.clear();
     state.profileSelectionOrder = [];
     saveActiveProfileNames();
-    const select = panel.querySelector("#ofov-f-profileSelect");
-    if (select) Array.from(select.options).forEach((o) => { o.selected = false; });
+    const container = panel.querySelector("#ofov-f-profileSelect");
+    if (container) {
+      container.querySelectorAll('.ofov-msList input[type="checkbox"]').forEach((cb) => { cb.checked = false; });
+      const trigger = container.querySelector(".ofov-msTrigger");
+      if (trigger) trigger.textContent = "Manual filters";
+    }
   }
 
   function refreshProfileSelect(panel) {
-    const select = panel.querySelector("#ofov-f-profileSelect");
-    if (!select) return;
+    const container = panel.querySelector("#ofov-f-profileSelect");
+    if (!container) return;
+    const list = container.querySelector(".ofov-msList");
+    const trigger = container.querySelector(".ofov-msTrigger");
     const profiles = getStoredProfiles().filter((p) => p?.name).sort((a, b) => String(a.name).localeCompare(String(b.name)));
     const validNames = new Set(profiles.map((p) => p.name));
     state.activeProfiles = new Set(Array.from(state.activeProfiles).filter((n) => validNames.has(n)));
     state.profileSelectionOrder = state.profileSelectionOrder.filter((n) => state.activeProfiles.has(n));
-    select.innerHTML = profiles
-      .map((p) => `<option value="${escapeHtml(p.name)}"${state.activeProfiles.has(p.name) ? " selected" : ""}>${escapeHtml(p.name)}</option>`)
-      .join("");
+
+    const options = profiles.map((p) => ({ value: p.name, label: p.name }));
+    list.innerHTML = multiSelectItemsHtml(options, state.activeProfiles);
+    trigger.textContent = summarizeMultiSelect(options, state.activeProfiles, "Manual filters");
     saveActiveProfileNames();
   }
 
@@ -537,8 +614,6 @@
       panel.innerHTML = buildFiltersPanelHtml();
       wireFiltersPanel(panel);
       refreshProfileSelect(panel);
-      const select = panel.querySelector("#ofov-f-profileSelect");
-      if (select) Array.from(select.options).forEach((o) => { o.selected = state.activeProfiles.has(o.value); });
       const nameInput = panel.querySelector("#ofov-f-profileName");
       if (nameInput && profileName) nameInput.value = profileName;
     } finally {
@@ -590,15 +665,34 @@
   }
 
   function wireFiltersPanel(panel) {
+    const onManualFilterChange = () => {
+      leaveProfileModeOnManualChange(panel);
+      state.filters = readFiltersFromForm(panel);
+      render(estimatedServerTime());
+    };
+
     panel.querySelectorAll("select, input[type=number]").forEach((el) => {
-      if (el.id === "ofov-f-profileSelect") return; // wired separately below
-      const handler = () => {
-        leaveProfileModeOnManualChange(panel);
-        state.filters = readFiltersFromForm(panel);
-        render(estimatedServerTime());
-      };
-      el.addEventListener("change", handler);
-      if (el.tagName === "INPUT") el.addEventListener("input", handler);
+      el.addEventListener("change", onManualFilterChange);
+      if (el.tagName === "INPUT") el.addEventListener("input", onManualFilterChange);
+    });
+
+    wireMultiSelectDropdown(panel, "ofov-f-teams", { onChange: onManualFilterChange, emptyLabel: "All" });
+    wireMultiSelectDropdown(panel, "ofov-f-maps", { onChange: onManualFilterChange, emptyLabel: "All maps" });
+    wireMultiSelectDropdown(panel, "ofov-f-profileSelect", {
+      emptyLabel: "Manual filters",
+      onChange: (selected) => {
+        state.activeProfiles = new Set(selected);
+        state.profileSelectionOrder = selected;
+        saveActiveProfileNames();
+
+        const lastName = selected[selected.length - 1];
+        const lastProfile = lastName ? getStoredProfiles().find((p) => p?.name === lastName) : null;
+        if (lastProfile) {
+          applyProfileSnapshot(lastProfile.filters, panel, lastProfile.name);
+        } else {
+          render(estimatedServerTime());
+        }
+      },
     });
 
     panel.querySelectorAll("[data-tri][data-val]").forEach((btn) => {
@@ -626,22 +720,6 @@
       wireFiltersPanel(panel);
       refreshProfileSelect(panel);
       render(estimatedServerTime());
-    });
-
-    const profileSelect = panel.querySelector("#ofov-f-profileSelect");
-    profileSelect?.addEventListener("change", () => {
-      const selected = Array.from(profileSelect.selectedOptions).map((o) => o.value);
-      state.activeProfiles = new Set(selected);
-      state.profileSelectionOrder = selected;
-      saveActiveProfileNames();
-
-      const lastName = selected[selected.length - 1];
-      const lastProfile = lastName ? getStoredProfiles().find((p) => p?.name === lastName) : null;
-      if (lastProfile) {
-        applyProfileSnapshot(lastProfile.filters, panel, lastProfile.name);
-      } else {
-        render(estimatedServerTime());
-      }
     });
 
     panel.querySelector("#ofov-f-profileSave")?.addEventListener("click", () => saveCurrentProfile(panel));
@@ -1271,6 +1349,35 @@
         border-radius: 0.35rem; padding: 0.35rem 0.45rem; font-size: 0.74rem;
       }
       .ofov-field select:focus, .ofov-field input:focus { outline: 1px solid #4f9eff; }
+
+      /* Compact multi-select dropdown (Teams/Map/Active profiles) — a
+         trigger button plus a popover list of checkable rows, so picking
+         several values is a plain click per row instead of a ctrl/cmd-click
+         on a native multi-select list. */
+      .ofov-msDropdown { position: relative; }
+      .ofov-msTrigger {
+        display: block; width: 100%; text-align: left;
+        background: #0d1017; color: #fff; border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 0.35rem; padding: 0.35rem 0.45rem; font-size: 0.74rem; cursor: pointer;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .ofov-msTrigger:hover { filter: brightness(1.25); }
+      .ofov-msTrigger[aria-expanded="true"] { outline: 1px solid #4f9eff; }
+      .ofov-msList {
+        position: absolute; top: calc(100% + 0.25rem); left: 0; right: 0; z-index: 50;
+        max-height: 14rem; overflow-y: auto;
+        background: #0d1017; border: 1px solid rgba(255,255,255,0.2); border-radius: 0.4rem;
+        padding: 0.3rem;
+        box-shadow: 0 10px 24px rgba(0,0,0,0.45);
+      }
+      .ofov-msItem {
+        display: flex; align-items: center; gap: 0.4rem;
+        padding: 0.3rem 0.4rem; border-radius: 0.25rem; cursor: pointer;
+        font-size: 0.72rem; color: #fff;
+      }
+      .ofov-msItem:hover { background: rgba(255,255,255,0.1); }
+      .ofov-msItem input[type="checkbox"] { flex-shrink: 0; }
+
       .ofov-modSectionLabel {
         font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
         letter-spacing: 0.05em; color: rgba(255,255,255,0.5);
@@ -1349,6 +1456,16 @@
       const willOpen = filtersPanel.hidden;
       filtersPanel.hidden = !willOpen;
       filtersToggle.setAttribute("aria-expanded", String(willOpen));
+    });
+
+    // Closes any open Teams/Map/Active-profiles dropdown on an outside
+    // click — added once here rather than in wireFiltersPanel, which reruns
+    // on every panel rebuild (reset, applying a profile) and would
+    // otherwise pile up duplicate listeners.
+    document.addEventListener("click", (e) => {
+      if (e.target.closest(".ofov-msDropdown")) return;
+      filtersPanel.querySelectorAll(".ofov-msList").forEach((l) => { l.hidden = true; });
+      filtersPanel.querySelectorAll(".ofov-msTrigger").forEach((t) => t.setAttribute("aria-expanded", "false"));
     });
 
     function joinFromCard(card) {
