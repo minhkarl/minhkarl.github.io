@@ -1009,18 +1009,17 @@
         to { opacity: 1; transform: translateY(0); }
       }
 
-      #ofov-root { width: 100%; position: relative; }
+      #ofov-root { width: 100%; }
+      .ofov-layout { display: flex; align-items: flex-start; gap: 0.8rem; }
+      .ofov-main { flex: 1 1 auto; min-width: 0; }
       #ofov-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        /* auto-fit (not a fixed column count) so this reflows on its own
+           width — the grid narrows when the filters sidebar opens beside it,
+           not just on viewport size. */
+        grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
         gap: 0.6rem;
         align-items: start;
-        /* Clears the floating Filters button (absolutely positioned, so it
-           takes no space in flow on its own) sitting in this same corner. */
-        margin-top: 2rem;
-      }
-      @media (max-width: 640px) {
-        #ofov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
       .ofov-col { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; position: relative; }
       .ofov-colHeader {
@@ -1152,31 +1151,26 @@
       .ofov-actionBtn:hover { filter: brightness(1.15); transform: scale(1.02); }
       .ofov-actionBtn:active { transform: scale(0.98); }
       .ofov-solo { background: #4f9eff; }
+      #ofov-filtersToggle[aria-expanded="true"] { background: #4f9eff; }
 
-      /* Absolutely positioned so it takes no space in flow — the grid's own
-         margin-top clears it instead of a dedicated toolbar row. */
-      .ofov-toolbarFloat { position: absolute; top: 0; right: 0; z-index: 30; }
       .ofov-smallBtn {
-        background: #1a1f2e; color: #fff; border: 1px solid rgba(255,255,255,0.14);
+        background: #0d1017; color: #fff; border: 1px solid rgba(255,255,255,0.14);
         border-radius: 0.4rem; padding: 0.35rem 0.7rem; font-size: 0.68rem; font-weight: 700;
         text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer;
         transition: filter 0.15s ease;
       }
       .ofov-smallBtn:hover { filter: brightness(1.2); }
-      #ofov-filtersToggle[aria-expanded="true"] { background: #4f9eff; }
 
-      /* position:fixed (not absolute) and positioned via JS against the
-         viewport (see positionFiltersPanel in mount()) rather than CSS
-         anchoring to #ofov-root — that sits in a narrow column, and an
-         ancestor of it clips an absolutely-positioned child that pokes out
-         past its bounds. Fixed positioning escapes that clipping entirely. */
+      /* Laid out as a normal flex sibling of .ofov-main (see .ofov-layout)
+         rather than a floating/positioned popover — same background/border
+         as the rest of the overlay's own chrome (.ofov-colHeader etc.) so it
+         reads as part of the page instead of a hovering box on top of it. */
       .ofov-filtersPanel {
-        position: fixed; z-index: 100000;
-        width: min(26rem, calc(100vw - 2rem));
-        background: #12161f; border: 1px solid rgba(255,255,255,0.14);
+        flex: 0 0 24rem;
+        max-width: calc(100vw - 2rem);
+        background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1);
         border-radius: 0.75rem; padding: 0.8rem;
-        max-height: 75vh; overflow-y: auto;
-        box-shadow: 0 18px 44px rgba(0,0,0,0.5);
+        max-height: 80vh; overflow-y: auto;
       }
       .ofov-filtersRow {
         display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.6rem; align-items: flex-start;
@@ -1188,7 +1182,7 @@
         letter-spacing: 0.03em; color: rgba(255,255,255,0.55);
       }
       .ofov-field select, .ofov-field input {
-        background: #1a1f2e; color: #fff; border: 1px solid rgba(255,255,255,0.14);
+        background: #0d1017; color: #fff; border: 1px solid rgba(255,255,255,0.14);
         border-radius: 0.35rem; padding: 0.35rem 0.45rem; font-size: 0.74rem;
       }
       .ofov-field select:focus, .ofov-field input:focus { outline: 1px solid #4f9eff; }
@@ -1217,7 +1211,7 @@
       .ofov-details[open] > summary::before { content: "▾ "; }
       .ofov-details[open] > summary { margin-bottom: 0.5rem; }
       .ofov-modBox {
-        background: #1a1f2e; border: 1px solid rgba(255,255,255,0.08);
+        background: #0d1017; border: 1px solid rgba(255,255,255,0.08);
         border-radius: 0.4rem; padding: 0.4rem 0.5rem;
       }
       .ofov-modTitle {
@@ -1248,15 +1242,17 @@
     const root = document.createElement("div");
     root.id = "ofov-root";
     root.innerHTML = `
-      <div class="ofov-toolbarFloat">
-        <button type="button" id="ofov-filtersToggle" class="ofov-smallBtn" aria-expanded="false">Filters</button>
-      </div>
-      <div id="ofov-filtersPanel" class="ofov-filtersPanel" hidden>${buildFiltersPanelHtml()}</div>
-      <div id="ofov-grid"></div>
-      <div class="ofov-actions">
-        <button class="ofov-actionBtn ofov-solo" data-action="solo">Solo</button>
-        <button class="ofov-actionBtn" data-action="create">Create Lobby</button>
-        <button class="ofov-actionBtn" data-action="ranked">Ranked</button>
+      <div class="ofov-layout">
+        <div class="ofov-main">
+          <div id="ofov-grid"></div>
+          <div class="ofov-actions">
+            <button class="ofov-actionBtn ofov-solo" data-action="solo">Solo</button>
+            <button class="ofov-actionBtn" data-action="create">Create Lobby</button>
+            <button class="ofov-actionBtn" data-action="ranked">Ranked</button>
+            <button type="button" id="ofov-filtersToggle" class="ofov-actionBtn" aria-expanded="false">Filters</button>
+          </div>
+        </div>
+        <div id="ofov-filtersPanel" class="ofov-filtersPanel" hidden>${buildFiltersPanelHtml()}</div>
       </div>
     `;
 
@@ -1265,48 +1261,13 @@
     wireFiltersPanel(filtersPanel);
     initProfilesAndFilters(filtersPanel);
 
-    // Runs each time the panel opens (its size can change — a modifier
-    // section expanding, a longer profile list) rather than once, so it's
-    // always positioned against the button's current spot and the current
-    // viewport size instead of a stale measurement.
-    function positionFiltersPanel() {
-      const btnRect = filtersToggle.getBoundingClientRect();
-      const margin = 8;
-      const panelWidth = filtersPanel.offsetWidth;
-      const panelHeight = filtersPanel.offsetHeight;
-
-      let left = btnRect.right + margin;
-      if (left + panelWidth > window.innerWidth - margin) {
-        left = Math.max(margin, btnRect.left - panelWidth - margin);
-      }
-      let top = btnRect.top;
-      if (top + panelHeight > window.innerHeight - margin) {
-        top = Math.max(margin, window.innerHeight - margin - panelHeight);
-      }
-
-      filtersPanel.style.left = `${left}px`;
-      filtersPanel.style.top = `${top}px`;
-    }
-
+    // A plain toggle now — the panel is laid out inline as part of the page
+    // (not a floating popover), so there's no outside-click/Escape dismissal
+    // to wire up; it just stays open until the button is clicked again.
     filtersToggle?.addEventListener("click", () => {
       const willOpen = filtersPanel.hidden;
       filtersPanel.hidden = !willOpen;
       filtersToggle.setAttribute("aria-expanded", String(willOpen));
-      if (willOpen) positionFiltersPanel();
-    });
-    // Popover behavior: closes on an outside click or Escape, same pattern
-    // as news-box's own dropdown below.
-    document.addEventListener("click", (e) => {
-      if (filtersPanel.hidden) return;
-      if (filtersPanel.contains(e.target) || e.target === filtersToggle) return;
-      filtersPanel.hidden = true;
-      filtersToggle?.setAttribute("aria-expanded", "false");
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !filtersPanel.hidden) {
-        filtersPanel.hidden = true;
-        filtersToggle?.setAttribute("aria-expanded", "false");
-      }
     });
 
     function joinFromCard(card) {
