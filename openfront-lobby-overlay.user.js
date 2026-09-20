@@ -1072,6 +1072,24 @@
         to { opacity: 1; transform: translateY(0); }
       }
 
+      /* Folded into the Terms/Privacy row (see relocateFooter) instead of
+         sitting on its own centered line — the block-level centering/margin
+         it had there would misalign it once it's just another item in that
+         row's flex layout. */
+      .ofov-footerVersionInline {
+        margin: 0 !important; padding: 0 !important; text-align: left !important;
+      }
+      /* The footer's left grid column (see relocateFooter's comment) is
+         otherwise empty, so anchoring the icon row to its bottom-left corner
+         doesn't overlap the centered Terms/Privacy content or the Steam
+         promo widget in the right column. */
+      .ofov-footerIconsCorner {
+        position: absolute !important;
+        left: 0.75rem; bottom: 0.4rem;
+        justify-content: flex-start !important;
+        padding: 0 !important; margin: 0 !important;
+      }
+
       #ofov-root { width: 100%; }
       #ofov-grid {
         display: grid;
@@ -1480,6 +1498,32 @@
     });
   }
 
+  // <page-footer>'s <footer> has three sibling divs in a row (verified via
+  // DevTools 2026-09-20, v0.34.11): the GitHub/Reddit/Discord/logo icon row,
+  // then .footer-version (a real, stable class — the full version string,
+  // shell version included, kept off the nav bar so a bug report can quote
+  // it), then the Terms of Service/copyright/Privacy Policy row. Moving
+  // .footer-version into that last row folds it into one line instead of
+  // its own; the icon row moves into the footer's own left column, which
+  // the footer's own comment says exists only so the Steam promo widget (in
+  // the right column) never overlaps centered content — otherwise unused
+  // here, so anchoring the icons there doesn't fight anything.
+  function relocateFooter(attemptsLeft = 15) {
+    const versionEl = document.querySelector(".footer-version");
+    const tosRow = versionEl?.nextElementSibling;
+    const iconsRow = versionEl?.previousElementSibling;
+    if (!versionEl || !tosRow || !iconsRow) {
+      if (attemptsLeft > 0) setTimeout(() => relocateFooter(attemptsLeft - 1), 300);
+      return;
+    }
+    if (versionEl.classList.contains("ofov-footerVersionInline")) return; // already done
+
+    versionEl.classList.add("ofov-footerVersionInline");
+    tosRow.insertBefore(versionEl, tosRow.firstChild);
+
+    iconsRow.classList.add("ofov-footerIconsCorner");
+  }
+
   // The CSS hiding rules and the SOLO/CREATE/RANKED/hosted-join actions all
   // depend on OpenFront's current markup/components matching what this was
   // written against — nothing else here would notice if that assumption
@@ -1511,6 +1555,7 @@
     injectStyle();
     mount(gms);
     relocateNewsBox();
+    relocateFooter();
     connect();
     setInterval(tickTimers, 1000);
     setTimeout(() => verifyIntegration(gms), 1000);
