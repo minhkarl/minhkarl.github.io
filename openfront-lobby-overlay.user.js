@@ -10,7 +10,8 @@
 // @require      https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/lobby-filters.js
 // @updateURL    https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js
 // @downloadURL  https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      trackerfront.com
 // ==/UserScript==
 
 (function () {
@@ -82,6 +83,187 @@
   // added here rather than in the shared module.
   function freshFilters() {
     return { ...LF.defaultFilters(), maps: [] };
+  }
+
+  // --- TrackerFront integration: openfront.io itself shows no ranked-ELO or
+  // game-history UI, so the left sidebar's stats come from trackerfront.com's
+  // public API instead. Its own frontend calls it same-origin (relative
+  // /api/public/... paths — read directly out of its bundle 2026-09-20) and
+  // that API sends no Access-Control-Allow-Origin header at all, so a plain
+  // page fetch() from openfront.io would be silently blocked by the browser
+  // exactly like api.openfront.io blocked the standalone dashboard earlier.
+  // GM_xmlhttpRequest issues the request from the userscript engine instead
+  // of the page's own realm, which isn't subject to that same check — this
+  // is the one thing @grant none couldn't do, hence the @grant/@connect
+  // added above.
+  const TF_API_BASE = "https://trackerfront.com/api/public";
+  const TF_REFRESH_MS = 5 * 60_000;
+
+  function gmFetchJson(url) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url,
+        headers: { Accept: "application/json" },
+        onload: (res) => {
+          if (res.status < 200 || res.status >= 300) {
+            reject(new Error(`${url} responded ${res.status}`));
+            return;
+          }
+          try {
+            resolve(JSON.parse(res.responseText));
+          } catch (e) {
+            reject(e);
+          }
+        },
+        onerror: () => reject(new Error(`${url} request failed`)),
+      });
+    });
+  }
+
+  const RANK_COLORS = {
+    iron: "#8d8d8d", bronze: "#b8763e", silver: "#c7ccd6", gold: "#f2c14e",
+    platinum: "#4fd1c5", diamond: "#4f9eff", master: "#c084fc",
+  };
+  function rankColor(name) {
+    return RANK_COLORS[String(name || "").toLowerCase()] || "#4f9eff";
+  }
+
+  // UsernameInput.ts (openfrontio/OpenFrontIO) persists the chosen name to
+  // this exact localStorage key — verified 2026-09-20 against main. Doesn't
+  // account for the "use verified name" override showing a different display
+  // name than what's stored here; good enough since trackerfront's own
+  // /search matches against both a player's raw username and display name.
+  function getLocalUsername() {
+    try {
+      return localStorage.getItem("username") || "";
+    } catch {
+      return "";
+    }
+  }
+
+  // /players/{id}/games comes back most-recent-first (confirmed from a live
+  // response) — count backwards from the front until the streak breaks.
+  function computeStreak(games) {
+    if (!games || games.length === 0) return null;
+    const won = games[0].won;
+    let count = 0;
+    for (const g of games) {
+      if (g.won !== won) break;
+      count++;
+    }
+    return { won, count };
+  }
+
+  async function fetchTrackerFrontStats(username) {
+    if (!username) return { state: "no-username" };
+    let matches;
+    try {
+      matches = await gmFetchJson(`${TF_API_BASE}/search?q=${encodeURIComponent(username)}&limit=8`);
+    } catch (e) {
+      console.error("[of-overlay] trackerfront search failed", e);
+      return { state: "error" };
+    }
+    const match =
+      matches.find((p) => p.username === username) ||
+      matches.find((p) => p.display_name === username) ||
+      null;
+    if (!match) return { state: "not-found", username };
+
+    try {
+      const [profile, games, history] = await Promise.all([
+        gmFetchJson(`${TF_API_BASE}/players/${match.public_uuid}`),
+        gmFetchJson(`${TF_API_BASE}/players/${match.public_uuid}/games?limit=10`),
+        gmFetchJson(`${TF_API_BASE}/players/${match.public_uuid}/history?limit=12`),
+      ]);
+      return { state: "ok", profile, games, history, streak: computeStreak(games) };
+    } catch (e) {
+      console.error("[of-overlay] trackerfront profile fetch failed", e);
+      return { state: "error" };
+    }
+  }
+
+  // A plain inline-SVG polyline instead of a charting library — a userscript
+  // has no bundler step to pull one in through, and a handful of RR points
+  // doesn't need more than this.
+  function sparklineSvg(history) {
+    const points = (history || []).map((h) => h?.rank?.rr).filter((v) => typeof v === "number");
+    if (points.length < 2) return "";
+    const w = 100, h = 28;
+    const min = Math.min(...points);
+    const span = Math.max(...points) - min || 1;
+    const step = w / (points.length - 1);
+    const path = points
+      .map((v, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`)
+      .join(" ");
+    return `<svg class="ofov-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${path}"></path></svg>`;
+  }
+
+  function trackerGameRowHtml(g) {
+    const delta = typeof g.rr_delta === "number" ? `${g.rr_delta >= 0 ? "+" : ""}${g.rr_delta.toFixed(1)}` : "";
+    return `
+      <div class="ofov-tfGame ${g.won ? "ofov-tfWin" : "ofov-tfLoss"}">
+        <span class="ofov-tfResult">${g.won ? "W" : "L"}</span>
+        <span class="ofov-tfMap">${escapeHtml(g.game_map || "—")}</span>
+        <span class="ofov-tfDelta">${escapeHtml(delta)}</span>
+      </div>
+    `;
+  }
+
+  function buildTrackerFrontPanelHtml(data) {
+    if (!data || data.state === "no-username") {
+      return `<div class="ofov-tfEmpty">Set a username in-game to see your stats here.</div>`;
+    }
+    if (data.state === "not-found") {
+      return `<div class="ofov-tfEmpty">No ranked games found for <strong>${escapeHtml(data.username)}</strong> yet.</div>`;
+    }
+    if (data.state === "error") {
+      return `<div class="ofov-tfEmpty">Couldn't load stats from trackerfront.com right now.</div>`;
+    }
+
+    const { profile, games, streak, history } = data;
+    const rank = profile.rank || {};
+    const rankName = (rank.name || "unranked").toUpperCase();
+    const rr = typeof rank.rr === "number" ? rank.rr.toFixed(1) : "—";
+    const streakHtml =
+      streak && streak.count >= 2
+        ? `<div class="ofov-tfStreak ${streak.won ? "ofov-tfWin" : "ofov-tfLoss"}">${streak.won ? "🔥" : "❄️"} ${streak.count} ${streak.won ? "win" : "loss"} streak</div>`
+        : "";
+    const lastGames = (games || []).slice(0, 2).map(trackerGameRowHtml).join("");
+
+    return `
+      <div class="ofov-tfHeader">
+        <span class="ofov-tfRankBadge" style="background:${rankColor(rank.name)}">${escapeHtml(rankName)}</span>
+        ${profile.verified ? `<span class="ofov-tfVerified" title="Verified">✓</span>` : ""}
+        ${profile.clan_tag ? `<span class="ofov-tfClan">[${escapeHtml(profile.clan_tag)}]</span>` : ""}
+      </div>
+      <div class="ofov-tfRR">RR ${escapeHtml(rr)}<span class="ofov-tfRRMax">/100</span></div>
+      ${sparklineSvg(history)}
+      <div class="ofov-tfMeta">Global rank <strong>#${profile.global_position ?? "—"}</strong> / ${profile.total_ranked ?? "—"}</div>
+      <div class="ofov-tfMeta">${profile.games_scored ?? 0} scored games</div>
+      ${streakHtml}
+      <div class="ofov-modSectionLabel">Last games</div>
+      <div class="ofov-tfGames">${lastGames || `<div class="ofov-tfEmpty">No games yet</div>`}</div>
+    `;
+  }
+
+  // Bumped on every call so an overlapping refresh (e.g. the 5-minute timer
+  // firing again before a slow request resolved) can't have its response
+  // land after a newer one already did.
+  let tfGeneration = 0;
+
+  async function refreshTrackerFrontPanel(bodyEl) {
+    const generation = ++tfGeneration;
+    const data = await fetchTrackerFrontStats(getLocalUsername());
+    if (generation !== tfGeneration || !bodyEl.isConnected) return;
+    bodyEl.innerHTML = buildTrackerFrontPanelHtml(data);
+  }
+
+  function mountTrackerFrontPanel(bodyEl, refreshBtn) {
+    bodyEl.innerHTML = `<div class="ofov-tfEmpty">Loading…</div>`;
+    refreshTrackerFrontPanel(bodyEl);
+    setInterval(() => refreshTrackerFrontPanel(bodyEl), TF_REFRESH_MS);
+    refreshBtn?.addEventListener("click", () => refreshTrackerFrontPanel(bodyEl));
   }
 
   const state = {
@@ -482,6 +664,7 @@
     );
 
     return `
+      <div class="ofov-modSectionLabel">Lobby</div>
       <div class="ofov-filtersRow">
         <div class="ofov-field">
           <label>Type</label>
@@ -516,6 +699,7 @@
         </div>
       </div>
 
+      <div class="ofov-modSectionLabel">Players</div>
       <div class="ofov-filtersRow">
         <div class="ofov-field"><label>Min joined</label><input id="ofov-f-minJoined" type="number" placeholder="any" value="${f.minJoined ?? ""}"></div>
         <div class="ofov-field"><label>Max joined</label><input id="ofov-f-maxJoined" type="number" placeholder="any" value="${f.maxJoined ?? ""}"></div>
@@ -1315,31 +1499,96 @@
       }
       .ofov-smallBtn:hover { filter: brightness(1.2); }
 
-      /* This overlay lives in a narrow left-hand column (the lobby-card
-         list sits in a strip beside the game's own full-screen map), so
-         laying the panel out as a flex sibling of the grid — sharing that
-         same narrow column's width — left too little room for either.
-         Docked to the actual right edge of the screen instead: no shadow
-         and only the inner corners rounded, flush against the viewport
-         edge, so it reads as a panel built into the page rather than a
-         card floating on top of it. */
-      .ofov-filtersPanel {
-        position: fixed; z-index: 40000;
-        /* 4.5rem below the top nav matches news-box's own offset above
-           (same "clears the nav bar" measurement); the bottom clearance is
-           taller to clear the game's own "OpenFront on Steam" promo banner
-           plus the page footer beneath it, not just a small margin. */
-        top: 4.5rem; right: 0; bottom: 6rem;
-        width: min(26rem, calc(100vw - 2rem));
-        background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1); border-right: none;
-        border-radius: 0.75rem 0 0 0.75rem; padding: 0.8rem;
-        overflow-y: auto;
+      /* Three-column layout: a left profile/stats column and a right
+         filters column both flank the lobby grid as permanent parts of the
+         page (not popovers), which is what actually frees up the vertical
+         space above the grid that the identity row used to need on its
+         own — the grid's own column count still auto-fits to whatever
+         width is left in the middle. sticky (not fixed) lets each side
+         column scroll independently if its own content overflows while
+         still tracking the page as it scrolls. */
+      .ofov-layout { display: flex; align-items: flex-start; gap: 0.6rem; }
+      .ofov-mainCol { flex: 1 1 auto; min-width: 0; }
+
+      .ofov-sidePanel {
+        flex: 0 0 auto;
+        position: sticky; top: 4.5rem;
+        width: min(14rem, 24vw);
+        max-height: calc(100vh - 10.5rem);
+        background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 0.75rem;
+        display: flex; flex-direction: column;
+        overflow: hidden;
+        transition: width 150ms ease;
       }
+      .ofov-filtersSidePanel { width: min(18rem, 30vw); }
+      /* Shrunk to a thin strip rather than removed outright — a quick way
+         to reclaim width for the grid without losing the panel's state
+         (open dropdowns, scroll position, form values). */
+      .ofov-sidePanel.ofov-collapsed { width: 2.4rem; }
+      .ofov-sidePanel.ofov-collapsed .ofov-sidePanelBody,
+      .ofov-sidePanel.ofov-collapsed .ofov-sidePanelHeader span { display: none; }
+
+      .ofov-sidePanelHeader {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0.5rem 0.6rem; flex-shrink: 0;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+        letter-spacing: 0.05em; color: rgba(255,255,255,0.7);
+      }
+      .ofov-sidePanelHeaderBtns { display: flex; gap: 0.3rem; }
+      .ofov-iconBtn {
+        background: transparent; border: 1px solid rgba(255,255,255,0.16);
+        color: #fff; border-radius: 0.3rem; width: 1.35rem; height: 1.35rem;
+        font-size: 0.7rem; line-height: 1; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      }
+      .ofov-iconBtn:hover { filter: brightness(1.3); }
+      .ofov-sidePanelBody { padding: 0.65rem; overflow-y: auto; }
+
+      /* --- TrackerFront profile/stats panel --- */
+      .ofov-tfEmpty { color: rgba(255,255,255,0.45); font-size: 0.68rem; line-height: 1.4; }
+      .ofov-tfHeader { display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.35rem; }
+      .ofov-tfRankBadge {
+        color: #06120f; font-size: 0.62rem; font-weight: 800;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        padding: 0.15rem 0.4rem; border-radius: 0.25rem;
+      }
+      .ofov-tfVerified { color: #4ade80; font-weight: 800; font-size: 0.75rem; }
+      .ofov-tfClan { color: rgba(255,255,255,0.5); font-size: 0.62rem; font-weight: 700; }
+      .ofov-tfRR { color: #fff; font-size: 1.05rem; font-weight: 800; }
+      .ofov-tfRRMax { color: rgba(255,255,255,0.4); font-size: 0.7rem; font-weight: 600; }
+      .ofov-sparkline { width: 100%; height: 1.75rem; margin: 0.3rem 0; display: block; }
+      .ofov-sparkline path { fill: none; stroke: #4f9eff; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+      .ofov-tfMeta { color: rgba(255,255,255,0.6); font-size: 0.68rem; margin-top: 0.15rem; }
+      .ofov-tfMeta strong { color: #fff; }
+      .ofov-tfStreak { font-size: 0.68rem; font-weight: 700; margin-top: 0.4rem; }
+      .ofov-tfStreak.ofov-tfWin { color: #4ade80; }
+      .ofov-tfStreak.ofov-tfLoss { color: #f87171; }
+      .ofov-tfGames { display: flex; flex-direction: column; gap: 0.3rem; }
+      .ofov-tfGame {
+        display: flex; align-items: center; gap: 0.35rem;
+        background: #0d1017; border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 0.35rem; padding: 0.3rem 0.4rem; font-size: 0.66rem;
+      }
+      .ofov-tfResult {
+        flex-shrink: 0; width: 1.1rem; height: 1.1rem; border-radius: 0.25rem;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 0.62rem; color: #06120f;
+      }
+      .ofov-tfGame.ofov-tfWin .ofov-tfResult { background: #4ade80; }
+      .ofov-tfGame.ofov-tfLoss .ofov-tfResult { background: #f87171; }
+      .ofov-tfMap {
+        flex: 1 1 auto; min-width: 0; color: rgba(255,255,255,0.75);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .ofov-tfDelta { flex-shrink: 0; color: rgba(255,255,255,0.5); font-weight: 700; }
+
       .ofov-filtersRow {
-        display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.6rem; align-items: flex-start;
+        display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; align-items: flex-start;
       }
-      .ofov-field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 8rem; flex: 1 1 8rem; }
-      .ofov-fieldGrow { flex: 1 1 12rem; }
+      .ofov-field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 7rem; flex: 1 1 7rem; }
+      .ofov-fieldGrow { flex: 1 1 10rem; }
       .ofov-field label {
         font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
         letter-spacing: 0.03em; color: rgba(255,255,255,0.55);
@@ -1385,7 +1634,7 @@
       }
       .ofov-modSectionLabel:first-child { margin-top: 0; }
       .ofov-modGrid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.4rem;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.35rem;
       }
       /* Collapsed by default so ~37 modifier tri-groups don't dominate the
          popover — one disclosure covers both Modifier logic and Custom Lobby. */
@@ -1434,29 +1683,59 @@
     const root = document.createElement("div");
     root.id = "ofov-root";
     root.innerHTML = `
-      <div id="ofov-grid"></div>
-      <div class="ofov-actions">
-        <button class="ofov-actionBtn ofov-solo" data-action="solo">Solo</button>
-        <button class="ofov-actionBtn" data-action="create">Create Lobby</button>
-        <button class="ofov-actionBtn" data-action="ranked">Ranked</button>
-        <button type="button" id="ofov-filtersToggle" class="ofov-actionBtn" aria-expanded="false">Filters</button>
+      <div id="ofov-layout" class="ofov-layout">
+        <aside id="ofov-leftOuter" class="ofov-sidePanel">
+          <div class="ofov-sidePanelHeader">
+            <span>Profile</span>
+            <div class="ofov-sidePanelHeaderBtns">
+              <button type="button" id="ofov-tfRefresh" class="ofov-iconBtn" title="Refresh stats">⟳</button>
+              <button type="button" id="ofov-leftCollapse" class="ofov-iconBtn" aria-expanded="true" title="Collapse">‹</button>
+            </div>
+          </div>
+          <div id="ofov-tfBody" class="ofov-sidePanelBody"></div>
+        </aside>
+
+        <div class="ofov-mainCol">
+          <div id="ofov-grid"></div>
+          <div class="ofov-actions">
+            <button class="ofov-actionBtn ofov-solo" data-action="solo">Solo</button>
+            <button class="ofov-actionBtn" data-action="create">Create Lobby</button>
+            <button class="ofov-actionBtn" data-action="ranked">Ranked</button>
+            <button type="button" id="ofov-filtersToggle" class="ofov-actionBtn" aria-expanded="true">Filters</button>
+          </div>
+        </div>
+
+        <aside id="ofov-filtersOuter" class="ofov-sidePanel ofov-filtersSidePanel">
+          <div class="ofov-sidePanelHeader"><span>Filters</span></div>
+          <div id="ofov-filtersPanel" class="ofov-sidePanelBody">${buildFiltersPanelHtml()}</div>
+        </aside>
       </div>
-      <div id="ofov-filtersPanel" class="ofov-filtersPanel" hidden>${buildFiltersPanelHtml()}</div>
     `;
 
     const filtersPanel = root.querySelector("#ofov-filtersPanel");
+    const filtersOuter = root.querySelector("#ofov-filtersOuter");
     const filtersToggle = root.querySelector("#ofov-filtersToggle");
     wireFiltersPanel(filtersPanel);
     initProfilesAndFilters(filtersPanel);
 
-    // A plain toggle now — the panel is laid out inline as part of the page
-    // (not a floating popover), so there's no outside-click/Escape dismissal
-    // to wire up; it just stays open until the button is clicked again.
+    // The filters column is a permanent part of the layout now (not a
+    // popover), so "collapsing" it just shrinks it to a thin strip instead
+    // of hiding/showing content — same idea as the left panel's own chevron.
     filtersToggle?.addEventListener("click", () => {
-      const willOpen = filtersPanel.hidden;
-      filtersPanel.hidden = !willOpen;
-      filtersToggle.setAttribute("aria-expanded", String(willOpen));
+      const willExpand = filtersOuter.classList.contains("ofov-collapsed");
+      filtersOuter.classList.toggle("ofov-collapsed", !willExpand);
+      filtersToggle.setAttribute("aria-expanded", String(willExpand));
     });
+
+    const leftOuter = root.querySelector("#ofov-leftOuter");
+    const leftCollapse = root.querySelector("#ofov-leftCollapse");
+    leftCollapse?.addEventListener("click", () => {
+      const willExpand = leftOuter.classList.contains("ofov-collapsed");
+      leftOuter.classList.toggle("ofov-collapsed", !willExpand);
+      leftCollapse.setAttribute("aria-expanded", String(willExpand));
+      leftCollapse.textContent = willExpand ? "‹" : "›";
+    });
+    mountTrackerFrontPanel(root.querySelector("#ofov-tfBody"), root.querySelector("#ofov-tfRefresh"));
 
     // Closes any open Teams/Map/Active-profiles dropdown on an outside
     // click — added once here rather than in wireFiltersPanel, which reruns
