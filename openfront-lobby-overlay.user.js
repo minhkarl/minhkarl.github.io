@@ -1499,32 +1499,38 @@
       }
       .ofov-smallBtn:hover { filter: brightness(1.2); }
 
-      /* Three-column layout: a left profile/stats column and a right
-         filters column both flank the lobby grid as permanent parts of the
-         page (not popovers), which is what actually frees up the vertical
-         space above the grid that the identity row used to need on its
-         own — the grid's own column count still auto-fits to whatever
-         width is left in the middle. sticky (not fixed) lets each side
-         column scroll independently if its own content overflows while
-         still tracking the page as it scrolls. */
-      .ofov-layout { display: flex; align-items: flex-start; gap: 0.6rem; }
-      .ofov-mainCol { flex: 1 1 auto; min-width: 0; }
+      /* The lobby browser (everything #ofov-root sits beside) lives in
+         OpenFront's own narrow left-hand column next to its full-screen map
+         background — verified live 2026-09-21: laying the side panels out
+         as normal-flow flex children of that column (an earlier attempt)
+         made the *column itself* grow to fit them, squeezing #ofov-grid
+         down to 2 cramped cards per row instead of leaving it the width it
+         already had. Docking both panels to the real viewport edges instead
+         — the same trick the original single filters panel used — lets them
+         sit in the actual empty map space outside that column without
+         touching its width at all, so the grid gets its full room back. */
+      .ofov-mainCol { min-width: 0; }
 
       .ofov-sidePanel {
-        flex: 0 0 auto;
-        position: sticky; top: 4.5rem;
-        width: min(14rem, 24vw);
-        max-height: calc(100vh - 10.5rem);
+        position: fixed; z-index: 40000;
+        /* 4.5rem below the top nav matches news-box's own offset above; the
+           bottom clearance clears the game's "OpenFront on Steam" promo
+           banner plus the page footer beneath it. */
+        top: 4.5rem; bottom: 6rem;
+        width: min(14rem, 22vw);
         background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 0.75rem;
         display: flex; flex-direction: column;
         overflow: hidden;
         transition: width 150ms ease;
       }
-      .ofov-filtersSidePanel { width: min(18rem, 30vw); }
+      #ofov-leftOuter { left: 0; border-left: none; border-radius: 0 0.75rem 0.75rem 0; }
+      #ofov-filtersOuter {
+        right: 0; border-right: none; border-radius: 0.75rem 0 0 0.75rem;
+        width: min(18rem, 28vw);
+      }
       /* Shrunk to a thin strip rather than removed outright — a quick way
-         to reclaim width for the grid without losing the panel's state
-         (open dropdowns, scroll position, form values). */
+         to reclaim screen space without losing the panel's state (open
+         dropdowns, scroll position, form values). */
       .ofov-sidePanel.ofov-collapsed { width: 2.4rem; }
       .ofov-sidePanel.ofov-collapsed .ofov-sidePanelBody,
       .ofov-sidePanel.ofov-collapsed .ofov-sidePanelHeader span { display: none; }
@@ -1705,7 +1711,7 @@
           </div>
         </div>
 
-        <aside id="ofov-filtersOuter" class="ofov-sidePanel ofov-filtersSidePanel">
+        <aside id="ofov-filtersOuter" class="ofov-sidePanel">
           <div class="ofov-sidePanelHeader"><span>Filters</span></div>
           <div id="ofov-filtersPanel" class="ofov-sidePanelBody">${buildFiltersPanelHtml()}</div>
         </aside>
