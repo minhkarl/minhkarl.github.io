@@ -352,29 +352,12 @@
     );
   }
 
-  // Only maps a lobby is actually advertising right now, so the dropdown
-  // doesn't list all ~120 maps the game knows about when most have no open
-  // game. A map the user has selected stays listed even if it briefly has no
-  // lobby, so the filter doesn't silently reset out from under them.
+  // The full map list, same source lobby-wire.js's decoder uses (kept in
+  // sync by the repo's resync automation) — every map the game knows about,
+  // not just ones with a lobby open right now. Static, so unlike the profile
+  // select this never needs refreshing after the panel is first built.
   function getKnownMaps() {
-    const maps = new Set();
-    for (const key of Object.keys(state.games)) {
-      for (const g of state.games[key] || []) {
-        const m = g?.gameConfig?.gameMap;
-        if (m) maps.add(m);
-      }
-    }
-    for (const m of state.filters.maps || []) maps.add(m);
-    return Array.from(maps).sort();
-  }
-
-  function refreshMapFilterOptions(panel) {
-    const select = panel?.querySelector("#ofov-f-maps");
-    if (!select) return;
-    const selected = new Set(state.filters.maps || []);
-    select.innerHTML = getKnownMaps()
-      .map((m) => `<option value="${escapeHtml(m)}"${selected.has(m) ? " selected" : ""}>${escapeHtml(m)}</option>`)
-      .join("");
+    return (window.OpenFrontWire?.GAME_MAP || []).slice().sort();
   }
 
   // Filters/sorts across all four server buckets together (a "Teams" type
@@ -689,12 +672,6 @@
   function render(serverTime) {
     const root = document.getElementById("ofov-grid");
     if (!root) return;
-
-    // New maps can appear in later snapshots that weren't in the dropdown
-    // when the panel was last built — keep it current without needing a
-    // full panel rebuild.
-    const filtersPanelEl = document.getElementById("ofov-filtersPanel");
-    if (filtersPanelEl) refreshMapFilterOptions(filtersPanelEl);
 
     const firstRects = new Map();
     root.querySelectorAll(".ofov-card[data-game-id]").forEach((card) => {
@@ -1193,11 +1170,13 @@
       .ofov-smallBtn:hover { filter: brightness(1.2); }
       #ofov-filtersToggle[aria-expanded="true"] { background: #4f9eff; }
 
-      /* A floating popover anchored under the toggle, laid on top of the grid
-         rather than pushing it down. */
+      /* A flyout anchored to the right of #ofov-root (not below it) — this
+         sits in a narrow column with its own lobby cards/buttons below the
+         toggle, so dropping the panel down would cover them; opening
+         sideways into the open space next to the column avoids that. */
       .ofov-filtersPanel {
-        position: absolute; top: 2rem; right: 0; z-index: 25;
-        width: min(30rem, 92vw);
+        position: absolute; top: 0; left: 100%; margin-left: 0.6rem; z-index: 25;
+        width: min(26rem, calc(100vw - 2rem));
         background: #12161f; border: 1px solid rgba(255,255,255,0.14);
         border-radius: 0.75rem; padding: 0.8rem;
         max-height: 75vh; overflow-y: auto;

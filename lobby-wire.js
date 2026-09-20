@@ -411,7 +411,11 @@
     return msg;
   }
 
-  const api = { decodeLobbyMessage, ZbinDecodeError };
+  // GAME_MAP exposed alongside the decoder itself: it's the canonical,
+  // resync-maintained list of every map name the game knows about (not just
+  // ones currently in a lobby), which the overlay's map filter dropdown
+  // wants directly rather than keeping a second copy that could drift.
+  const api = { decodeLobbyMessage, ZbinDecodeError, GAME_MAP };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.OpenFrontWire = api;
 })(typeof window !== "undefined" ? window : globalThis);
