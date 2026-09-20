@@ -669,60 +669,123 @@
     col.classList.toggle("ofov-hasMoreBelow", hasMore);
   }
 
+  function nodeFromHtml(html) {
+    const t = document.createElement("template");
+    t.innerHTML = html.trim();
+    return t.content.firstElementChild;
+  }
+
+  // Identifies everything a card shows besides the live-ticking
+  // count/countdown (those patch separately via patchCounts/tickTimers). A
+  // hosted lobby can keep the same game ID across a rehost while its
+  // map/modifiers change entirely — this fingerprint is how reconcileColumn
+  // notices that and rebuilds the card instead of leaving stale content
+  // behind on a reused node.
+  function cardFingerprint(g) {
+    const cfg = g.gameConfig || {};
+    return [
+      g.gameID, cfg.gameMap, cfg.maxPlayers, cfg.playerTeams, g.label, g.accent, g.featured,
+      JSON.stringify(cfg.publicGameModifiers || {}), cfg.rankedType, cfg.nations,
+    ].join(":");
+  }
+
+  // Build the four empty column shells once — reused for the lifetime of
+  // the page rather than torn down and rebuilt (see reconcileColumn for why).
+  function ensureGridColumns(root) {
+    if (root.querySelector(".ofov-col")) return;
+    root.innerHTML = CATEGORIES.map(
+      ({ key, label, dot }) => `
+        <div class="ofov-col" data-cat="${key}">
+          <div class="ofov-colHeader">
+            <span class="ofov-dot" style="background:${dot}"></span>
+            ${escapeHtml(label.toUpperCase())}
+            <span class="ofov-count" data-col-count="${key}">0</span>
+          </div>
+          <div class="ofov-colCards" data-col-cards="${key}"></div>
+          <div class="ofov-colCardsFade" aria-hidden="true">
+            <span class="ofov-moreHint">▾ Scroll for more</span>
+          </div>
+        </div>
+      `,
+    ).join("");
+  }
+
+  // Reconciles one column's cards against the desired game list, keyed by
+  // id, instead of replacing .ofov-colCards' innerHTML wholesale — a full
+  // rebuild on every "full" snapshot (arriving every few seconds) recreated
+  // this element each time, which reset its scrollTop to 0 (scrolled-down
+  // users got yanked back to the top) and re-decoded every card's image,
+  // which is what read as stutter. Reusing the node for a game that's still
+  // here — and only rebuilding it if cardFingerprint says its content
+  // actually changed — keeps the container itself, and most cards, fully
+  // untouched across a snapshot that didn't really change anything.
+  function reconcileColumn(colCardsEl, games, serverTime, source) {
+    const existing = new Map();
+    colCardsEl.querySelectorAll(":scope > .ofov-card[data-game-id]").forEach((n) => existing.set(n.dataset.gameId, n));
+
+    if (games.length === 0) {
+      for (const node of existing.values()) node.remove();
+      if (!colCardsEl.querySelector(":scope > .ofov-colEmpty")) {
+        colCardsEl.innerHTML = `<div class="ofov-colEmpty">No open lobbies</div>`;
+      }
+      return;
+    }
+    colCardsEl.querySelector(":scope > .ofov-colEmpty")?.remove();
+
+    const frag = document.createDocumentFragment();
+    for (const g of games) {
+      const id = String(g.gameID);
+      const fp = cardFingerprint(g);
+      let node = existing.get(id);
+      if (node) existing.delete(id);
+      if (!node || node.dataset.ofovFp !== fp) {
+        // One malformed lobby (or a modifier-labels.js @require that failed
+        // to load) shouldn't take down every column — skip just that card.
+        try {
+          node = nodeFromHtml(cardHtml(g, serverTime, source));
+          node.dataset.ofovFp = fp;
+        } catch (e) {
+          console.error("[of-overlay] failed to render lobby card", g?.gameID, e);
+          continue;
+        }
+      }
+      frag.appendChild(node);
+    }
+    for (const node of existing.values()) node.remove();
+    colCardsEl.appendChild(frag);
+  }
+
   function render(serverTime) {
     const root = document.getElementById("ofov-grid");
     if (!root) return;
 
+    ensureGridColumns(root);
+
+    // FLIP (First-Last-Invert-Play): a card that shifts position — most
+    // commonly the one below a lobby that just ended sliding up to take its
+    // place — jumps from doing this instantly to visibly animating into its
+    // new spot. Read every surviving card's rect first, in one pass, before
+    // reconciling — writing a transform on one card would otherwise
+    // invalidate layout for the next card's rect read, forcing a separate
+    // synchronous reflow per moved card instead of sharing one.
     const firstRects = new Map();
     root.querySelectorAll(".ofov-card[data-game-id]").forEach((card) => {
       firstRects.set(card.dataset.gameId, card.getBoundingClientRect());
     });
 
     const visible = getVisibleGames();
-    const html = CATEGORIES.map(({ key, label, dot, source }) => {
+    for (const { key, source } of CATEGORIES) {
       const list = visible[key] || [];
-      const cards = list.length
-        ? list
-            .map((g) => {
-              // One malformed lobby (or a modifier-labels.js @require that
-              // failed to load) shouldn't take down every column — skip
-              // just that card and keep going.
-              try {
-                return cardHtml(g, serverTime, source);
-              } catch (e) {
-                console.error("[of-overlay] failed to render lobby card", g?.gameID, e);
-                return "";
-              }
-            })
-            .join("")
-        : `<div class="ofov-colEmpty">No open lobbies</div>`;
-      return `
-        <div class="ofov-col">
-          <div class="ofov-colHeader">
-            <span class="ofov-dot" style="background:${dot}"></span>
-            ${escapeHtml(label.toUpperCase())}
-            <span class="ofov-count">${list.length}</span>
-          </div>
-          <div class="ofov-colCards">${cards}</div>
-          <div class="ofov-colCardsFade" aria-hidden="true">
-            <span class="ofov-moreHint">▾ Scroll for more</span>
-          </div>
-        </div>
-      `;
-    }).join("");
-    root.innerHTML = html;
+      const colCardsEl = root.querySelector(`.ofov-colCards[data-col-cards="${key}"]`);
+      const countEl = root.querySelector(`[data-col-count="${key}"]`);
+      if (countEl) countEl.textContent = String(list.length);
+      if (colCardsEl) reconcileColumn(colCardsEl, list, serverTime, source);
+    }
     root.querySelectorAll(".ofov-colCards").forEach(updateColumnFade);
 
     state.timeEls.clear();
     state.metaEls.clear();
 
-    // FLIP (First-Last-Invert-Play): a card that shifts position across a
-    // rebuild — most commonly the one below a lobby that just ended sliding
-    // up to take its place — jumps from doing this instantly to visibly
-    // animating into its new spot. Read every card's rect first, in one
-    // pass, before writing any style — writing a transform on one card would
-    // otherwise invalidate layout for the next card's rect read, forcing a
-    // separate synchronous reflow per moved card instead of sharing one.
     const moves = [];
     root.querySelectorAll(".ofov-card[data-game-id]").forEach((card) => {
       const gameId = card.dataset.gameId;
