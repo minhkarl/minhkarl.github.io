@@ -1,15 +1,11 @@
 name: Resync lobby-wire.js
 
 on:
-  # Hourly schedule disabled 2026-09-14: v0.34.0-beta1 is tagged as the
-  # latest GitHub release but production hasn't deployed its wire shape yet
-  # (verified against live traffic), so this was exiting 2 and emailing a
-  # failure notification every hour for a drift that isn't actionable yet.
-  # Re-enable once production actually redeploys — check with a live frame
-  # capture first, not just the release tag (see lobby-wire.js's header
-  # comment). Runnable manually via workflow_dispatch in the meantime.
-  # schedule:
-  #   - cron: "17 * * * *"
+  # Re-enabled 2026-09-20: production has redeployed v0.34's wire shape
+  # (GameConfig.trusted, PublicLobbyFull.gitCommit/active), so lobby-wire.js
+  # is back in sync and hourly drift checks are actionable again.
+  schedule:
+    - cron: "17 * * * *"
   workflow_dispatch: {}
 
 permissions:
