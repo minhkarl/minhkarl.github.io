@@ -200,21 +200,55 @@
   // A plain inline-SVG polyline instead of a charting library — a userscript
   // has no bundler step to pull one in through, and a handful of RR points
   // doesn't need more than this.
+  // Ascending tier order — index doubles as "how many tiers below master".
+  const RANK_TIER_ORDER = ["iron", "bronze", "silver", "gold", "platinum", "diamond", "master", "challenger"];
+  function rankTierIndex(name) {
+    const i = RANK_TIER_ORDER.indexOf(String(name || "").toLowerCase());
+    return i === -1 ? 0 : i;
+  }
+
+  // RR is 0-100 *within* the current tier, so plotting it raw makes every
+  // promotion (RR wrapping from ~100 back to ~0 as the next tier starts)
+  // read as a huge loss instead of the gain it actually was. Folding the
+  // tier into the value (tierIndex*100 + rr) keeps the line climbing
+  // through a promotion the way the player's actual standing did — a real
+  // drop only shows up now when a game was actually lost, which the dot for
+  // that point also confirms directly instead of leaving it to guesswork.
   function sparklineSvg(history, color) {
-    const points = (history || []).map((h) => h?.rank?.rr).filter((v) => typeof v === "number");
+    const points = (history || [])
+      .filter((h) => h?.rank && typeof h.rank.rr === "number")
+      .map((h) => ({ value: rankTierIndex(h.rank.name) * 100 + h.rank.rr, won: h.won }));
     if (points.length < 2) return "";
-    const w = 100, h = 28;
-    const min = Math.min(...points);
-    const span = Math.max(...points) - min || 1;
+
+    const w = 100, h = 36, pad = 3;
+    const values = points.map((p) => p.value);
+    const min = Math.min(...values);
+    const span = Math.max(...values) - min || 1;
     const step = w / (points.length - 1);
-    const path = points
-      .map((v, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`)
-      .join(" ");
-    // A `style` attribute, not the `stroke` presentation attribute — a plain
-    // SVG presentation attribute loses to .ofov-sparkline path's own stroke
-    // rule in the stylesheet regardless of source order, so this is the only
-    // way to actually get the current rank's color onto the line.
-    return `<svg class="ofov-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${path}" style="stroke:${color}"></path></svg>`;
+    const coords = points.map((p, i) => [
+      i * step,
+      h - pad - ((p.value - min) / span) * (h - pad * 2),
+    ]);
+
+    const linePath = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+    const areaPath = `${linePath} L${w.toFixed(1)},${h} L0,${h} Z`;
+    const dots = coords
+      .map(([x, y], i) => {
+        const won = points[i].won;
+        const dotColor = won === true ? "#4ade80" : won === false ? "#f87171" : color;
+        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4" style="fill:${dotColor}"></circle>`;
+      })
+      .join("");
+
+    // Presentation via `style`, not attributes — a plain SVG presentation
+    // attribute loses to a stylesheet rule targeting the same property
+    // regardless of source order, so `style` is the only reliable way to
+    // get the current rank's color (or a per-point win/loss color) in.
+    return `<svg class="ofov-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+      <path class="ofov-sparklineArea" d="${areaPath}" style="fill:${color}"></path>
+      <path class="ofov-sparklineLine" d="${linePath}" style="stroke:${color}"></path>
+      ${dots}
+    </svg>`;
   }
 
   function formatShortDate(iso) {
@@ -1538,8 +1572,6 @@
         --ofov-radius-btn: 0.4rem;
         --ofov-radius-full: 999px;
         --ofov-pad-badge: 0.15rem 0.4rem;
-        --ofov-pad-btn: 0.4rem 0.7rem;
-        --ofov-pad-field: 0.4rem 0.5rem;
         font-size: var(--ofov-fs-md);
         font-weight: var(--ofov-fw-regular);
       }
@@ -1715,16 +1747,20 @@
            bottom clearance clears the game's "OpenFront on Steam" promo
            banner plus the page footer beneath it. */
         top: 4.5rem; bottom: 6rem;
-        width: min(14rem, 22vw);
-        background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1);
+        width: min(20rem, 26vw);
+        /* A soft gradient over the flat panel color, and a bigger radius —
+           matches minhkarl.github.io's own .panel styling instead of the
+           flatter block look this started with. */
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)), #1a1f2e;
+        border: 1px solid rgba(255,255,255,0.1);
         display: flex; flex-direction: column;
         overflow: hidden;
         transition: width 150ms ease;
       }
-      #ofov-leftOuter { left: 0; border-left: none; border-radius: 0 0.75rem 0.75rem 0; }
+      #ofov-leftOuter { left: 0; border-left: none; border-radius: 0 0.9rem 0.9rem 0; }
       #ofov-filtersOuter {
-        right: 0; border-right: none; border-radius: 0.75rem 0 0 0.75rem;
-        width: min(18rem, 28vw);
+        right: 0; border-right: none; border-radius: 0.9rem 0 0 0.9rem;
+        width: min(28rem, 34vw);
       }
       /* Shrunk to a thin strip rather than removed outright — a quick way
          to reclaim screen space without losing the panel's state (open
@@ -1791,82 +1827,94 @@
 
       /* --- TrackerFront profile/stats panel --- */
       .ofov-tfEmpty { color: rgba(255,255,255,0.45); font-size: var(--ofov-fs-sm); line-height: 1.4; }
-      .ofov-tfHeader { display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.35rem; }
-      .ofov-tfRankIcon { width: 1.1rem; height: 1.1rem; flex-shrink: 0; }
+      .ofov-tfHeader { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+      .ofov-tfRankIcon { width: 2rem; height: 2rem; flex-shrink: 0; }
       .ofov-tfRankBadge {
-        color: #06120f; font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-bold);
+        color: #06120f; font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold);
         text-transform: uppercase; letter-spacing: 0.04em;
-        padding: var(--ofov-pad-badge); border-radius: var(--ofov-radius-badge);
+        padding: 0.25rem 0.55rem; border-radius: var(--ofov-radius-badge);
       }
-      .ofov-tfVerified { color: #4ade80; font-weight: var(--ofov-fw-bold); font-size: var(--ofov-fs-md); }
-      .ofov-tfClan { color: rgba(255,255,255,0.5); font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-bold); }
-      .ofov-tfRRRow { display: flex; align-items: center; gap: 0.4rem; }
+      .ofov-tfVerified { color: #4ade80; font-weight: var(--ofov-fw-bold); font-size: var(--ofov-fs-lg); }
+      .ofov-tfClan { color: rgba(255,255,255,0.5); font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold); }
+      .ofov-tfRRRow { display: flex; align-items: center; gap: 0.5rem; }
       .ofov-tfRRBarTrack {
-        flex: 1 1 auto; height: 0.4rem; background: rgba(255,255,255,0.12);
+        flex: 1 1 auto; height: 0.6rem; background: rgba(255,255,255,0.12);
         border-radius: var(--ofov-radius-full); overflow: hidden;
       }
       .ofov-tfRRBarFill { height: 100%; border-radius: var(--ofov-radius-full); transition: width 300ms ease; }
-      .ofov-tfRR { flex-shrink: 0; color: #fff; font-size: var(--ofov-fs-md); font-weight: var(--ofov-fw-bold); }
+      .ofov-tfRR { flex-shrink: 0; color: #fff; font-size: var(--ofov-fs-lg); font-weight: var(--ofov-fw-bold); }
       .ofov-tfRRMax { color: rgba(255,255,255,0.4); font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-regular); }
-      .ofov-sparkline { width: 100%; height: 1.75rem; margin: 0.3rem 0; display: block; }
-      .ofov-sparkline path { fill: none; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
-      .ofov-tfMeta { color: rgba(255,255,255,0.6); font-size: var(--ofov-fs-sm); margin-top: 0.15rem; }
+      /* Imitates trackerfront's own Recharts line — an area fill under a
+         colored line, plus a dot per point colored by that game's own
+         result, so a real dip (an actual loss) is visibly distinct from a
+         promotion resetting RR back toward 0 (a green dot, still climbing). */
+      .ofov-sparkline { width: 100%; height: 3rem; margin: 0.5rem 0; display: block; }
+      .ofov-sparklineArea { opacity: 0.18; }
+      .ofov-sparklineLine { fill: none; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+      .ofov-tfMeta { color: rgba(255,255,255,0.6); font-size: var(--ofov-fs-sm); margin-top: 0.2rem; }
       .ofov-tfMeta strong { color: #fff; }
-      .ofov-tfStreak { font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold); margin-top: 0.4rem; }
+      .ofov-tfStreak { font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold); margin-top: 0.5rem; }
       .ofov-tfStreak.ofov-tfWin { color: #4ade80; }
       .ofov-tfStreak.ofov-tfLoss { color: #f87171; }
-      .ofov-tfGames { display: flex; flex-direction: column; gap: 0.4rem; }
+      .ofov-tfGames { display: flex; flex-direction: column; gap: 0.5rem; }
       .ofov-tfGame {
-        display: flex; align-items: flex-start; gap: 0.5rem;
+        display: flex; align-items: flex-start; gap: 0.6rem;
         background: #0d1017; border: 1px solid rgba(255,255,255,0.08);
         border-left: 3px solid transparent;
-        border-radius: var(--ofov-radius-btn); padding: 0.4rem; font-size: var(--ofov-fs-sm);
+        border-radius: var(--ofov-radius-btn); padding: 0.5rem; font-size: var(--ofov-fs-sm);
       }
       .ofov-tfGame.ofov-tfWin { border-left-color: #4ade80; }
       .ofov-tfGame.ofov-tfLoss { border-left-color: #f87171; }
       .ofov-tfGameThumb {
-        width: 2rem; height: 2rem; flex-shrink: 0; object-fit: cover;
-        border-radius: 0.3rem; background: rgba(255,255,255,0.08);
+        width: 2.75rem; height: 2.75rem; flex-shrink: 0; object-fit: cover;
+        border-radius: 0.4rem; background: rgba(255,255,255,0.08);
       }
-      .ofov-tfGameBody { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+      .ofov-tfGameBody { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
       .ofov-tfGameTop { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
       .ofov-tfGameSub {
-        display: flex; align-items: center; gap: 0.3rem;
+        display: flex; align-items: center; gap: 0.35rem;
         color: rgba(255,255,255,0.55); font-size: var(--ofov-fs-xs);
       }
       .ofov-tfGameSubText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .ofov-tfGameDate { margin-left: auto; flex-shrink: 0; }
       .ofov-tfResultTag {
-        flex-shrink: 0; width: 1rem; height: 1rem; border-radius: var(--ofov-radius-badge);
+        flex-shrink: 0; width: 1.3rem; height: 1.3rem; border-radius: var(--ofov-radius-badge);
         display: flex; align-items: center; justify-content: center;
         font-weight: var(--ofov-fw-bold); font-size: var(--ofov-fs-xs); color: #06120f;
       }
       .ofov-tfGame.ofov-tfWin .ofov-tfResultTag { background: #4ade80; }
       .ofov-tfGame.ofov-tfLoss .ofov-tfResultTag { background: #f87171; }
       .ofov-tfMap {
-        flex: 1 1 auto; min-width: 0; color: #fff; font-weight: var(--ofov-fw-bold);
+        flex: 1 1 auto; min-width: 0; color: #fff; font-weight: var(--ofov-fw-bold); font-size: var(--ofov-fs-md);
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       .ofov-tfDelta { flex-shrink: 0; color: rgba(255,255,255,0.5); font-weight: var(--ofov-fw-bold); }
-      .ofov-tfTracked { display: flex; align-items: center; gap: 0.15rem; margin-top: 0.15rem; flex-wrap: wrap; }
-      .ofov-tfTrackedIcon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
-      .ofov-tfTrackedExtra { font-size: var(--ofov-fs-xs); color: rgba(255,255,255,0.4); margin-left: 0.1rem; }
+      .ofov-tfTracked { display: flex; align-items: center; gap: 0.25rem; margin-top: 0.25rem; flex-wrap: wrap; }
+      .ofov-tfTrackedIcon { width: 1.3rem; height: 1.3rem; flex-shrink: 0; }
+      .ofov-tfTrackedExtra { font-size: var(--ofov-fs-xs); color: rgba(255,255,255,0.4); margin-left: 0.15rem; }
 
+      /* This section's look is pulled from minhkarl.github.io's own
+         styles.css (.panel/.groupLabel/.modBox etc.) rather than this
+         script's own earlier, flatter styling — softer tinted backgrounds,
+         an accent-colored section label with a trailing divider line, and
+         more generous padding throughout, now that the panel has the width
+         to spare for it. */
       .ofov-filtersRow {
-        display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; align-items: flex-start;
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+        column-gap: 0.6rem; row-gap: 0.7rem; margin-bottom: 0.8rem; align-items: end;
       }
-      .ofov-field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 7rem; flex: 1 1 7rem; }
-      .ofov-fieldGrow { flex: 1 1 10rem; }
+      .ofov-field { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+      .ofov-fieldGrow { grid-column: span 2; }
       .ofov-field label {
-        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); text-transform: uppercase;
-        letter-spacing: 0.03em; color: rgba(255,255,255,0.55);
+        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-bold); text-transform: uppercase;
+        letter-spacing: 0.05em; color: rgba(255,255,255,0.45);
       }
       /* Every text input/select/dropdown-trigger in the filters panel shares
          this same padding/radius/size — a field reads as the same kind of
          control no matter which of the three it happens to be. */
       .ofov-field select, .ofov-field input {
-        background: #0d1017; color: #fff; border: 1px solid rgba(255,255,255,0.14);
-        border-radius: var(--ofov-radius-btn); padding: var(--ofov-pad-field); font-size: var(--ofov-fs-md);
+        background: rgba(255,255,255,0.04); color: #fff; border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 0.5rem; padding: 0.5rem 0.6rem; font-size: var(--ofov-fs-md);
       }
       .ofov-field select:focus, .ofov-field input:focus { outline: 1px solid #4f9eff; }
 
@@ -1877,67 +1925,74 @@
       .ofov-msDropdown { position: relative; }
       .ofov-msTrigger {
         display: block; width: 100%; text-align: left;
-        background: #0d1017; color: #fff; border: 1px solid rgba(255,255,255,0.14);
-        border-radius: var(--ofov-radius-btn); padding: var(--ofov-pad-field);
+        background: rgba(255,255,255,0.04); color: #fff; border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 0.5rem; padding: 0.5rem 0.6rem;
         font-size: var(--ofov-fs-md); cursor: pointer;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
-      .ofov-msTrigger:hover { filter: brightness(1.25); }
+      .ofov-msTrigger:hover { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.07); }
       .ofov-msTrigger[aria-expanded="true"] { outline: 1px solid #4f9eff; }
       .ofov-msList {
-        position: absolute; top: calc(100% + 0.25rem); left: 0; right: 0; z-index: 50;
-        max-height: 14rem; overflow-y: auto;
-        background: #0d1017; border: 1px solid rgba(255,255,255,0.2); border-radius: var(--ofov-radius-btn);
-        padding: 0.3rem;
+        position: absolute; top: calc(100% + 0.3rem); left: 0; right: 0; z-index: 50;
+        max-height: 16rem; overflow-y: auto;
+        background: #161d2b; border: 1px solid rgba(255,255,255,0.16); border-radius: 0.5rem;
+        padding: 0.4rem;
         box-shadow: 0 10px 24px rgba(0,0,0,0.45);
       }
       .ofov-msItem {
-        display: flex; align-items: center; gap: 0.4rem;
-        padding: 0.3rem 0.4rem; border-radius: var(--ofov-radius-badge); cursor: pointer;
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.4rem 0.5rem; border-radius: 0.35rem; cursor: pointer;
         font-size: var(--ofov-fs-md); color: #fff;
       }
       .ofov-msItem:hover { background: rgba(255,255,255,0.1); }
       .ofov-msItem input[type="checkbox"] { flex-shrink: 0; }
 
       .ofov-modSectionLabel {
+        display: flex; align-items: center; gap: 0.6rem;
         font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); text-transform: uppercase;
-        letter-spacing: 0.05em; color: rgba(255,255,255,0.5);
-        margin: 0.6rem 0 0.4rem;
+        letter-spacing: 0.1em; color: #4f9eff;
+        margin: 1rem 0 0.6rem;
+      }
+      .ofov-modSectionLabel::after {
+        content: ""; flex: 1 1 auto; height: 1px;
+        background: linear-gradient(90deg, rgba(255,255,255,0.18), transparent);
       }
       .ofov-modSectionLabel:first-child { margin-top: 0; }
       .ofov-modGrid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.35rem;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.5rem;
       }
       /* Collapsed by default so ~37 modifier tri-groups don't dominate the
          popover — one disclosure covers both Modifier logic and Custom Lobby. */
       .ofov-details {
-        margin-bottom: 0.6rem; padding-top: 0.5rem;
+        margin-bottom: 0.6rem; padding-top: 0.6rem;
         border-top: 1px solid rgba(255,255,255,0.08);
       }
       .ofov-details > summary {
         cursor: pointer; list-style: none;
-        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); text-transform: uppercase;
-        letter-spacing: 0.05em; color: rgba(255,255,255,0.7);
+        font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-black); text-transform: uppercase;
+        letter-spacing: 0.08em; color: rgba(255,255,255,0.75);
       }
       .ofov-details > summary::-webkit-details-marker { display: none; }
       .ofov-details > summary::before { content: "▸ "; }
       .ofov-details[open] > summary::before { content: "▾ "; }
-      .ofov-details[open] > summary { margin-bottom: 0.5rem; }
+      .ofov-details[open] > summary { margin-bottom: 0.6rem; }
       .ofov-modBox {
-        background: #0d1017; border: 1px solid rgba(255,255,255,0.08);
-        border-radius: var(--ofov-radius-btn); padding: 0.4rem 0.5rem;
+        background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 0.6rem; padding: 0.55rem 0.65rem;
+        transition: border-color 130ms ease, background 130ms ease;
       }
+      .ofov-modBox:hover { border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); }
       .ofov-modTitle {
-        font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold); color: rgba(255,255,255,0.75); margin-bottom: 0.3rem;
+        font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold); color: rgba(255,255,255,0.75); margin-bottom: 0.4rem;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
-      .ofov-triBtns { display: flex; gap: 0.25rem; }
+      .ofov-triBtns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
       .ofov-triBtn {
-        flex: 1; background: #0d1017; color: rgba(255,255,255,0.6);
-        border: 1px solid rgba(255,255,255,0.1); border-radius: var(--ofov-radius-badge);
-        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); padding: 0.2rem 0; cursor: pointer;
+        min-width: 0; background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.6);
+        border: 1px solid rgba(255,255,255,0.1); border-radius: 0.4rem;
+        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); padding: 0.35rem 0.2rem; cursor: pointer;
       }
-      .ofov-triBtn:hover { filter: brightness(1.3); }
+      .ofov-triBtn:hover { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); color: #fff; }
       .ofov-triBtn.active[data-val="or"] { background: #4f9eff; color: #fff; border-color: #4f9eff; }
       .ofov-triBtn.active[data-val="and"] { background: #4ade80; color: #06240f; border-color: #4ade80; }
       .ofov-triBtn.active[data-val="not"] { background: #f87171; color: #2a0808; border-color: #f87171; }
