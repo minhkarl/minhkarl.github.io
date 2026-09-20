@@ -77,6 +77,13 @@
   // choice behaves identically in both places.
   const LF = window.OpenFrontLobbyFilters;
 
+  // lobby-filters.js's defaultFilters() mirrors index.html, which has no map
+  // filter — `maps` is an overlay-only addition layered on top, so it's
+  // added here rather than in the shared module.
+  function freshFilters() {
+    return { ...LF.defaultFilters(), maps: [] };
+  }
+
   const state = {
     games: { ffa: [], team: [], special: [], hosted: [] },
     byId: new Map(),
@@ -90,7 +97,7 @@
     metaEls: new Map(),
     serverTime: undefined,
     serverTimeCapturedAt: undefined,
-    filters: LF.defaultFilters(),
+    filters: freshFilters(),
     tri: LF.initTriState(),
     activeProfiles: new Set(),
     profileSelectionOrder: [],
@@ -291,6 +298,7 @@
       type: value.type || "all",
       hideEmpty: value.hideEmpty === true,
       teamFilters: Array.isArray(value.teamFilters) ? value.teamFilters.filter((v) => v && v !== "any") : [],
+      maps: Array.isArray(value.maps) ? value.maps.filter((v) => typeof v === "string" && v) : [],
       sort: value.sort || "starts_asc",
       minJoined: value.minJoined ?? null,
       maxJoined: value.maxJoined ?? null,
@@ -327,10 +335,46 @@
     return { ...state.filters, tri: Array.from(state.tri.entries()) };
   }
 
+  // Overlay-only, so it isn't part of lobby-filters.js's matchAllFilters —
+  // applied as an extra pass alongside it instead.
+  function matchesMapFilter(g, maps) {
+    if (!maps || maps.length === 0) return true;
+    return maps.includes(g.map);
+  }
+
   function matchesCurrentFilters(g) {
     const profiles = getActiveProfileDefinitions();
-    if (profiles.length === 0) return LF.matchAllFilters(g, state.filters, state.tri);
-    return profiles.some((profile) => LF.matchAllFilters(g, profile.filters, profile.tri));
+    if (profiles.length === 0) {
+      return LF.matchAllFilters(g, state.filters, state.tri) && matchesMapFilter(g, state.filters.maps);
+    }
+    return profiles.some(
+      (profile) => LF.matchAllFilters(g, profile.filters, profile.tri) && matchesMapFilter(g, profile.filters.maps),
+    );
+  }
+
+  // Only maps a lobby is actually advertising right now, so the dropdown
+  // doesn't list all ~120 maps the game knows about when most have no open
+  // game. A map the user has selected stays listed even if it briefly has no
+  // lobby, so the filter doesn't silently reset out from under them.
+  function getKnownMaps() {
+    const maps = new Set();
+    for (const key of Object.keys(state.games)) {
+      for (const g of state.games[key] || []) {
+        const m = g?.gameConfig?.gameMap;
+        if (m) maps.add(m);
+      }
+    }
+    for (const m of state.filters.maps || []) maps.add(m);
+    return Array.from(maps).sort();
+  }
+
+  function refreshMapFilterOptions(panel) {
+    const select = panel?.querySelector("#ofov-f-maps");
+    if (!select) return;
+    const selected = new Set(state.filters.maps || []);
+    select.innerHTML = getKnownMaps()
+      .map((m) => `<option value="${escapeHtml(m)}"${selected.has(m) ? " selected" : ""}>${escapeHtml(m)}</option>`)
+      .join("");
   }
 
   // Filters/sorts across all four server buckets together (a "Teams" type
@@ -377,6 +421,10 @@
     const sortOptionsHtml = SORT_OPTIONS.map(
       (o) => `<option value="${o.value}"${f.sort === o.value ? " selected" : ""}>${escapeHtml(o.label)}</option>`,
     ).join("");
+    const selectedMaps = new Set(f.maps || []);
+    const mapOptionsHtml = getKnownMaps()
+      .map((m) => `<option value="${escapeHtml(m)}"${selectedMaps.has(m) ? " selected" : ""}>${escapeHtml(m)}</option>`)
+      .join("");
 
     return `
       <div class="ofov-filtersRow">
@@ -388,10 +436,6 @@
             <option value="team"${f.type === "team" ? " selected" : ""}>Teams</option>
             <option value="humansVsNations"${f.type === "humansVsNations" ? " selected" : ""}>Humans vs Nations</option>
           </select>
-        </div>
-        <div class="ofov-field">
-          <label>Teams (ctrl/cmd-click for multiple)</label>
-          <select id="ofov-f-teams" multiple size="4">${teamOptionsHtml}</select>
         </div>
         <div class="ofov-field">
           <label>Hide empty</label>
@@ -407,6 +451,17 @@
       </div>
 
       <div class="ofov-filtersRow">
+        <div class="ofov-field ofov-fieldGrow">
+          <label>Teams (ctrl/cmd-click for multiple)</label>
+          <select id="ofov-f-teams" multiple size="3">${teamOptionsHtml}</select>
+        </div>
+        <div class="ofov-field ofov-fieldGrow">
+          <label>Map (ctrl/cmd-click for multiple)</label>
+          <select id="ofov-f-maps" multiple size="3">${mapOptionsHtml}</select>
+        </div>
+      </div>
+
+      <div class="ofov-filtersRow">
         <div class="ofov-field"><label>Min joined</label><input id="ofov-f-minJoined" type="number" placeholder="any" value="${f.minJoined ?? ""}"></div>
         <div class="ofov-field"><label>Max joined</label><input id="ofov-f-maxJoined" type="number" placeholder="any" value="${f.maxJoined ?? ""}"></div>
         <div class="ofov-field"><label>Capacity =</label><input id="ofov-f-maxPlayersEq" type="number" placeholder="any" value="${f.maxPlayersEq ?? ""}"></div>
@@ -417,11 +472,14 @@
         <div class="ofov-field"><label>&nbsp;</label><button type="button" id="ofov-f-reset" class="ofov-smallBtn">Reset all</button></div>
       </div>
 
-      <div class="ofov-modSectionLabel">Modifier logic</div>
-      <div class="ofov-modGrid">${modifierGroupsHtml([...LF.boolFilters, ...LF.numExact])}</div>
+      <details class="ofov-details">
+        <summary>Modifier &amp; Custom Lobby filters</summary>
+        <div class="ofov-modSectionLabel">Modifier logic</div>
+        <div class="ofov-modGrid">${modifierGroupsHtml([...LF.boolFilters, ...LF.numExact])}</div>
 
-      <div class="ofov-modSectionLabel">Custom Lobby</div>
-      <div class="ofov-modGrid">${modifierGroupsHtml(LF.privateBoolFilters)}</div>
+        <div class="ofov-modSectionLabel">Custom Lobby</div>
+        <div class="ofov-modGrid">${modifierGroupsHtml(LF.privateBoolFilters)}</div>
+      </details>
 
       <div class="ofov-modSectionLabel">Profiles</div>
       <div class="ofov-filtersRow">
@@ -439,11 +497,14 @@
     const teamFilters = teamsSelect
       ? Array.from(teamsSelect.selectedOptions).map((o) => o.value).filter((v) => v !== "any")
       : [];
+    const mapsSelect = panel.querySelector("#ofov-f-maps");
+    const maps = mapsSelect ? Array.from(mapsSelect.selectedOptions).map((o) => o.value) : [];
 
     return {
       type: val("ofov-f-type") || "all",
       hideEmpty: val("ofov-f-hideEmpty") === "yes",
       teamFilters,
+      maps,
       sort: val("ofov-f-sort") || "starts_asc",
       minJoined: LF.parseNum(val("ofov-f-minJoined")),
       maxJoined: LF.parseNum(val("ofov-f-maxJoined")),
@@ -573,7 +634,7 @@
     });
 
     panel.querySelector("#ofov-f-reset")?.addEventListener("click", () => {
-      state.filters = LF.defaultFilters();
+      state.filters = freshFilters();
       state.tri = LF.initTriState();
       state.activeProfiles.clear();
       state.profileSelectionOrder = [];
@@ -628,6 +689,12 @@
   function render(serverTime) {
     const root = document.getElementById("ofov-grid");
     if (!root) return;
+
+    // New maps can appear in later snapshots that weren't in the dropdown
+    // when the panel was last built — keep it current without needing a
+    // full panel rebuild.
+    const filtersPanelEl = document.getElementById("ofov-filtersPanel");
+    if (filtersPanelEl) refreshMapFilterOptions(filtersPanelEl);
 
     const firstRects = new Map();
     root.querySelectorAll(".ofov-card[data-game-id]").forEach((card) => {
@@ -965,12 +1032,15 @@
         to { opacity: 1; transform: translateY(0); }
       }
 
-      #ofov-root { width: 100%; }
+      #ofov-root { width: 100%; position: relative; }
       #ofov-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 1rem;
+        gap: 0.6rem;
         align-items: start;
+        /* Clears the floating Filters button (absolutely positioned, so it
+           takes no space in flow on its own) sitting in this same corner. */
+        margin-top: 2rem;
       }
       @media (max-width: 640px) {
         #ofov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -989,11 +1059,11 @@
         border-radius: 999px; padding: 0.15rem 0.5rem; font-size: 0.75rem;
       }
       .ofov-colCards {
-        display: flex; flex-direction: column; gap: 0.6rem;
-        /* Exactly 2 cards (13rem each) + the gap between them — a 3rd card
-           is fully clipped rather than peeking through, so scrolling only
-           ever shows up once there's actually a 3rd+ lobby. */
-        max-height: calc(13rem * 2 + 0.6rem);
+        display: flex; flex-direction: column; gap: 0.5rem;
+        /* Scales with viewport height so a tall window shows more cards
+           before scrolling, clamped so a short window still gets a sane
+           minimum and a huge one doesn't run off the bottom of the page. */
+        max-height: clamp(18rem, 52vh, 40rem);
         overflow-y: auto; overflow-x: hidden; padding-bottom: 2px;
         /* Scrolling still works — only the native scrollbar track/thumb is
            hidden, since .ofov-moreHint is the intended "there's more" cue. */
@@ -1028,7 +1098,7 @@
         position: relative;
         display: block;
         width: 100%;
-        height: 13rem;
+        height: 8rem;
         /* .ofov-colCards is a column flex container with overflow-y:auto —
            that combination drops the browser's automatic min-size for flex
            children to 0 (spec behavior once overflow isn't visible), so
@@ -1051,13 +1121,13 @@
         object-fit: cover; object-position: center;
       }
       .ofov-badges {
-        position: absolute; top: 0.5rem; left: 0.5rem; right: 4.5rem;
-        display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start;
+        position: absolute; top: 0.35rem; left: 0.35rem; right: 3.6rem;
+        display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start;
       }
       .ofov-badge {
-        background: #4f9eff; color: #fff; font-size: 0.65rem; font-weight: 700;
-        text-transform: uppercase; letter-spacing: 0.05em;
-        padding: 0.15rem 0.4rem; border-radius: 0.25rem;
+        background: #4f9eff; color: #fff; font-size: 0.56rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        padding: 0.1rem 0.32rem; border-radius: 0.22rem;
         max-width: 100%; overflow: hidden; text-overflow: ellipsis;
         white-space: nowrap; box-sizing: border-box;
       }
@@ -1074,78 +1144,103 @@
       .ofov-card:hover .ofov-modifierOverlay { opacity: 1; }
       .ofov-badgeFull { max-width: none; overflow: visible; text-overflow: clip; white-space: normal; }
       .ofov-time {
-        position: absolute; top: 0.5rem; right: 0.5rem;
-        background: #4f9eff; color: #fff; font-size: 0.7rem; font-weight: 700;
-        padding: 0.15rem 0.4rem; border-radius: 0.25rem;
+        position: absolute; top: 0.35rem; right: 0.35rem;
+        background: #4f9eff; color: #fff; font-size: 0.6rem; font-weight: 700;
+        padding: 0.1rem 0.32rem; border-radius: 0.22rem;
       }
       .ofov-bottom {
         position: absolute; bottom: 0; left: 0; right: 0;
-        background: linear-gradient(transparent, rgba(0,0,0,0.75) 40%);
-        padding: 1.5rem 0.75rem 0.5rem;
+        background: linear-gradient(transparent, rgba(0,0,0,0.8) 35%);
+        padding: 0.9rem 0.5rem 0.35rem;
       }
       .ofov-title {
         color: #fff; font-weight: 700; text-transform: uppercase;
-        font-size: 0.9rem; letter-spacing: 0.03em;
+        font-size: 0.72rem; letter-spacing: 0.02em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       .ofov-subrow {
         display: flex; align-items: center; justify-content: space-between;
-        gap: 0.5rem; margin-top: 0.15rem;
+        gap: 0.4rem; margin-top: 0.1rem;
       }
       .ofov-mode {
-        color: rgba(255,255,255,0.65); font-size: 0.7rem;
-        text-transform: uppercase; letter-spacing: 0.03em;
+        color: rgba(255,255,255,0.65); font-size: 0.6rem;
+        text-transform: uppercase; letter-spacing: 0.02em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        flex: 1 1 auto; min-width: 0;
       }
-      .ofov-meta { color: rgba(255,255,255,0.7); font-size: 0.7rem; flex-shrink: 0; }
+      .ofov-meta { color: rgba(255,255,255,0.7); font-size: 0.6rem; flex-shrink: 0; }
 
-      .ofov-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+      .ofov-actions { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
       .ofov-actionBtn {
-        flex: 1; height: 3.5rem; border-radius: 0.5rem; border: none;
+        flex: 1; height: 2.2rem; border-radius: 0.4rem; border: none;
         background: #1a1f2e; color: #fff; font-weight: 700; text-transform: uppercase;
-        letter-spacing: 0.05em; font-size: 0.85rem; cursor: pointer;
+        letter-spacing: 0.03em; font-size: 0.68rem; cursor: pointer;
         transition: filter 0.15s ease, transform 0.15s ease;
       }
       .ofov-actionBtn:hover { filter: brightness(1.15); transform: scale(1.02); }
       .ofov-actionBtn:active { transform: scale(0.98); }
       .ofov-solo { background: #4f9eff; }
 
-      .ofov-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }
+      /* Absolutely positioned so it takes no space in flow — the grid's own
+         margin-top clears it instead of a dedicated toolbar row. */
+      .ofov-toolbarFloat { position: absolute; top: 0; right: 0; z-index: 30; }
       .ofov-smallBtn {
         background: #1a1f2e; color: #fff; border: 1px solid rgba(255,255,255,0.14);
-        border-radius: 0.4rem; padding: 0.4rem 0.8rem; font-size: 0.75rem; font-weight: 700;
+        border-radius: 0.4rem; padding: 0.35rem 0.7rem; font-size: 0.68rem; font-weight: 700;
         text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer;
         transition: filter 0.15s ease;
       }
       .ofov-smallBtn:hover { filter: brightness(1.2); }
       #ofov-filtersToggle[aria-expanded="true"] { background: #4f9eff; }
 
+      /* A floating popover anchored under the toggle, laid on top of the grid
+         rather than pushing it down. */
       .ofov-filtersPanel {
-        background: #12161f; border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 0.75rem; padding: 0.9rem; margin-bottom: 0.75rem;
-        max-height: 60vh; overflow-y: auto;
+        position: absolute; top: 2rem; right: 0; z-index: 25;
+        width: min(30rem, 92vw);
+        background: #12161f; border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 0.75rem; padding: 0.8rem;
+        max-height: 75vh; overflow-y: auto;
+        box-shadow: 0 18px 44px rgba(0,0,0,0.5);
       }
       .ofov-filtersRow {
-        display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.75rem; align-items: flex-end;
+        display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.6rem; align-items: flex-start;
       }
-      .ofov-field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 8.5rem; }
-      .ofov-fieldGrow { flex: 1 1 14rem; }
+      .ofov-field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 8rem; flex: 1 1 8rem; }
+      .ofov-fieldGrow { flex: 1 1 12rem; }
       .ofov-field label {
-        font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
-        letter-spacing: 0.04em; color: rgba(255,255,255,0.55);
+        font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.03em; color: rgba(255,255,255,0.55);
       }
       .ofov-field select, .ofov-field input {
         background: #1a1f2e; color: #fff; border: 1px solid rgba(255,255,255,0.14);
-        border-radius: 0.35rem; padding: 0.4rem 0.5rem; font-size: 0.78rem;
+        border-radius: 0.35rem; padding: 0.35rem 0.45rem; font-size: 0.74rem;
       }
       .ofov-field select:focus, .ofov-field input:focus { outline: 1px solid #4f9eff; }
       .ofov-modSectionLabel {
-        font-size: 0.68rem; font-weight: 800; text-transform: uppercase;
+        font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
         letter-spacing: 0.05em; color: rgba(255,255,255,0.5);
-        margin: 0.75rem 0 0.45rem; padding-top: 0.5rem;
+        margin: 0.6rem 0 0.4rem;
+      }
+      .ofov-modSectionLabel:first-child { margin-top: 0; }
+      .ofov-modGrid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.4rem;
+      }
+      /* Collapsed by default so ~37 modifier tri-groups don't dominate the
+         popover — one disclosure covers both Modifier logic and Custom Lobby. */
+      .ofov-details {
+        margin-bottom: 0.6rem; padding-top: 0.5rem;
         border-top: 1px solid rgba(255,255,255,0.08);
       }
-      .ofov-modGrid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.5rem;
+      .ofov-details > summary {
+        cursor: pointer; list-style: none;
+        font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+        letter-spacing: 0.05em; color: rgba(255,255,255,0.7);
       }
+      .ofov-details > summary::-webkit-details-marker { display: none; }
+      .ofov-details > summary::before { content: "▸ "; }
+      .ofov-details[open] > summary::before { content: "▾ "; }
+      .ofov-details[open] > summary { margin-bottom: 0.5rem; }
       .ofov-modBox {
         background: #1a1f2e; border: 1px solid rgba(255,255,255,0.08);
         border-radius: 0.4rem; padding: 0.4rem 0.5rem;
@@ -1178,7 +1273,7 @@
     const root = document.createElement("div");
     root.id = "ofov-root";
     root.innerHTML = `
-      <div class="ofov-toolbar">
+      <div class="ofov-toolbarFloat">
         <button type="button" id="ofov-filtersToggle" class="ofov-smallBtn" aria-expanded="false">Filters</button>
       </div>
       <div id="ofov-filtersPanel" class="ofov-filtersPanel" hidden>${buildFiltersPanelHtml()}</div>
@@ -1191,14 +1286,28 @@
     `;
 
     const filtersPanel = root.querySelector("#ofov-filtersPanel");
+    const filtersToggle = root.querySelector("#ofov-filtersToggle");
     wireFiltersPanel(filtersPanel);
     initProfilesAndFilters(filtersPanel);
 
-    root.querySelector("#ofov-filtersToggle")?.addEventListener("click", (e) => {
-      const btn = e.currentTarget;
+    filtersToggle?.addEventListener("click", () => {
       const willOpen = filtersPanel.hidden;
       filtersPanel.hidden = !willOpen;
-      btn.setAttribute("aria-expanded", String(willOpen));
+      filtersToggle.setAttribute("aria-expanded", String(willOpen));
+    });
+    // Popover behavior: closes on an outside click or Escape, same pattern
+    // as news-box's own dropdown below.
+    document.addEventListener("click", (e) => {
+      if (filtersPanel.hidden) return;
+      if (filtersPanel.contains(e.target) || e.target === filtersToggle) return;
+      filtersPanel.hidden = true;
+      filtersToggle?.setAttribute("aria-expanded", "false");
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !filtersPanel.hidden) {
+        filtersPanel.hidden = true;
+        filtersToggle?.setAttribute("aria-expanded", "false");
+      }
     });
 
     function joinFromCard(card) {
