@@ -257,15 +257,27 @@
   function sortGames(games, sort) {
     const getMax = (g) => (typeof g.maxPlayers === "number" ? g.maxPlayers : -1);
 
-    const cmp =
+    const primary =
       {
         players_desc: (a, b) => (b.joined ?? 0) - (a.joined ?? 0),
         players_asc: (a, b) => (a.joined ?? 0) - (b.joined ?? 0),
         maxPlayers_desc: (a, b) => getMax(b) - getMax(a),
         maxPlayers_asc: (a, b) => getMax(a) - getMax(b),
+        // Two lobbies with no startsAt both fall back to Infinity here,
+        // making this NaN (Infinity - Infinity) for that pair — see the
+        // tiebreak below for why that matters.
         starts_asc: (a, b) => (a.startsAt ?? Infinity) - (b.startsAt ?? Infinity),
         map_asc: (a, b) => String(a.map ?? "").localeCompare(String(b.map ?? "")),
       }[sort] || ((a, b) => (b.joined ?? 0) - (a.joined ?? 0));
+
+    // A tied (or NaN) primary result falls through to id order instead of
+    // leaving the outcome to whatever order the two lobbies happened to
+    // arrive in on this particular snapshot. Without this, two lobbies that
+    // tie on the active sort key — most commonly two "Open" custom lobbies,
+    // both startsAt: null — visibly swap places whenever the server's own
+    // array order between them flips, since a comparator returning 0 or NaN
+    // gives JS's sort nothing to anchor on.
+    const cmp = (a, b) => primary(a, b) || String(a.id ?? "").localeCompare(String(b.id ?? ""));
 
     return games.slice().sort(cmp);
   }

@@ -1090,10 +1090,44 @@
     }
   }
 
+  // A hosted lobby that dips below the player minimum needed to keep its
+  // countdown running reports startsAt: null for a beat, then a real value
+  // again once someone rejoins — without smoothing that out, the card reads
+  // as "Open" and back on every such blip, and since sort_asc sorts by
+  // startsAt, it visibly swaps places in its column each time too. Holding
+  // the last real value for a short grace window absorbs the blip without
+  // hiding a countdown that's actually been cancelled for good — past the
+  // grace window it's treated as genuinely Open again.
+  const STARTS_AT_STICKY_MS = 8_000;
+  const startsAtSticky = new Map(); // gameID -> { startsAt, seenAt }
+
+  function stabilizeStartsAt(games) {
+    const now = Date.now();
+    for (const g of games) {
+      const id = String(g.gameID);
+      if (g.startsAt) {
+        startsAtSticky.set(id, { startsAt: g.startsAt, seenAt: now });
+        continue;
+      }
+      const sticky = startsAtSticky.get(id);
+      if (sticky && now - sticky.seenAt < STARTS_AT_STICKY_MS) {
+        g.startsAt = sticky.startsAt;
+      } else {
+        startsAtSticky.delete(id);
+      }
+    }
+  }
+
   function reindex() {
     state.byId.clear();
     for (const key of Object.keys(state.games)) {
       for (const g of state.games[key]) state.byId.set(String(g.gameID), g);
+    }
+    // A game that's left every category entirely (ended, or the host closed
+    // it) has nothing left to smooth for — without this the map would keep
+    // one stale entry per lobby that ever counted down, forever.
+    for (const id of startsAtSticky.keys()) {
+      if (!state.byId.has(id)) startsAtSticky.delete(id);
     }
   }
 
@@ -1159,6 +1193,7 @@
         };
         state.serverTime = msg.serverTime;
         state.serverTimeCapturedAt = Date.now();
+        for (const key of Object.keys(state.games)) stabilizeStartsAt(state.games[key]);
         reindex();
         render(state.serverTime);
         return;
@@ -1352,7 +1387,32 @@
         padding: 0 !important; margin: 0 !important;
       }
 
-      #ofov-root { width: 100%; }
+      /* Design tokens: every font-size/weight and every button/pill/tab
+         dimension below reads from this scale instead of a one-off value,
+         so a new element added later inherits the same look for free
+         instead of needing its own guess at "how big should this text be".
+         Three weights only — regular for body copy, bold for anything
+         interactive or numeric, black for headers and the one standout
+         number (RR) — and five font sizes, smallest to largest. */
+      #ofov-root {
+        width: 100%;
+        --ofov-fs-xs: 0.62rem;
+        --ofov-fs-sm: 0.68rem;
+        --ofov-fs-md: 0.74rem;
+        --ofov-fs-lg: 0.85rem;
+        --ofov-fs-xl: 1.05rem;
+        --ofov-fw-regular: 600;
+        --ofov-fw-bold: 700;
+        --ofov-fw-black: 800;
+        --ofov-radius-badge: 0.25rem;
+        --ofov-radius-btn: 0.4rem;
+        --ofov-radius-full: 999px;
+        --ofov-pad-badge: 0.15rem 0.4rem;
+        --ofov-pad-btn: 0.4rem 0.7rem;
+        --ofov-pad-field: 0.4rem 0.5rem;
+        font-size: var(--ofov-fs-md);
+        font-weight: var(--ofov-fw-regular);
+      }
       #ofov-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
@@ -1362,7 +1422,7 @@
       .ofov-col { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; position: relative; }
       .ofov-colHeader {
         display: flex; align-items: center; gap: 0.45rem;
-        font-size: 0.85rem; font-weight: 800; color: #fff;
+        font-size: var(--ofov-fs-lg); font-weight: var(--ofov-fw-black); color: #fff;
         text-transform: uppercase; letter-spacing: 0.03em;
         background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1);
         border-radius: 0.6rem; padding: 0.5rem 0.75rem;
@@ -1370,7 +1430,8 @@
       .ofov-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; flex-shrink: 0; }
       .ofov-count {
         margin-left: auto; background: rgba(255,255,255,0.12);
-        border-radius: 999px; padding: 0.15rem 0.5rem; font-size: 0.75rem;
+        border-radius: var(--ofov-radius-full); padding: 0.15rem 0.5rem;
+        font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold);
       }
       .ofov-colCards {
         display: flex; flex-direction: column; gap: 0.5rem;
@@ -1395,12 +1456,12 @@
       }
       .ofov-col.ofov-hasMoreBelow .ofov-colCardsFade { opacity: 1; }
       .ofov-moreHint {
-        font-size: 0.62rem; font-weight: 800; color: #fff;
+        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); color: #fff;
         text-transform: uppercase; letter-spacing: 0.05em;
-        background: rgba(0,0,0,0.6); padding: 0.2rem 0.55rem; border-radius: 999px;
+        background: rgba(0,0,0,0.6); padding: 0.2rem 0.55rem; border-radius: var(--ofov-radius-full);
       }
       .ofov-colEmpty {
-        color: rgba(255,255,255,0.4); font-size: 0.75rem;
+        color: rgba(255,255,255,0.4); font-size: var(--ofov-fs-sm);
         text-align: center; padding: 1rem 0;
       }
       .ofov-card {
@@ -1434,9 +1495,9 @@
         display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start;
       }
       .ofov-badge {
-        background: #4f9eff; color: #fff; font-size: 0.56rem; font-weight: 700;
+        background: #4f9eff; color: #fff; font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-bold);
         text-transform: uppercase; letter-spacing: 0.04em;
-        padding: 0.1rem 0.32rem; border-radius: 0.22rem;
+        padding: var(--ofov-pad-badge); border-radius: var(--ofov-radius-badge);
         max-width: 100%; overflow: hidden; text-overflow: ellipsis;
         white-space: nowrap; box-sizing: border-box;
       }
@@ -1454,8 +1515,8 @@
       .ofov-badgeFull { max-width: none; overflow: visible; text-overflow: clip; white-space: normal; }
       .ofov-time {
         position: absolute; top: 0.35rem; right: 0.35rem;
-        background: #4f9eff; color: #fff; font-size: 0.6rem; font-weight: 700;
-        padding: 0.1rem 0.32rem; border-radius: 0.22rem;
+        background: #4f9eff; color: #fff; font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-bold);
+        padding: var(--ofov-pad-badge); border-radius: var(--ofov-radius-badge);
       }
       .ofov-bottom {
         position: absolute; bottom: 0; left: 0; right: 0;
@@ -1463,8 +1524,8 @@
         padding: 0.9rem 0.5rem 0.35rem;
       }
       .ofov-title {
-        color: #fff; font-weight: 700; text-transform: uppercase;
-        font-size: 0.72rem; letter-spacing: 0.02em;
+        color: #fff; font-weight: var(--ofov-fw-bold); text-transform: uppercase;
+        font-size: var(--ofov-fs-md); letter-spacing: 0.02em;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       .ofov-subrow {
@@ -1472,18 +1533,18 @@
         gap: 0.4rem; margin-top: 0.1rem;
       }
       .ofov-mode {
-        color: rgba(255,255,255,0.65); font-size: 0.6rem;
+        color: rgba(255,255,255,0.65); font-size: var(--ofov-fs-xs);
         text-transform: uppercase; letter-spacing: 0.02em;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         flex: 1 1 auto; min-width: 0;
       }
-      .ofov-meta { color: rgba(255,255,255,0.7); font-size: 0.6rem; flex-shrink: 0; }
+      .ofov-meta { color: rgba(255,255,255,0.7); font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-bold); flex-shrink: 0; }
 
       .ofov-actions { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
       .ofov-actionBtn {
-        flex: 1; height: 2.2rem; border-radius: 0.4rem; border: none;
-        background: #1a1f2e; color: #fff; font-weight: 700; text-transform: uppercase;
-        letter-spacing: 0.03em; font-size: 0.68rem; cursor: pointer;
+        flex: 1; height: 2.2rem; border-radius: var(--ofov-radius-btn); border: none;
+        background: #1a1f2e; color: #fff; font-weight: var(--ofov-fw-bold); text-transform: uppercase;
+        letter-spacing: 0.03em; font-size: var(--ofov-fs-sm); cursor: pointer;
         transition: filter 0.15s ease, transform 0.15s ease;
       }
       .ofov-actionBtn:hover { filter: brightness(1.15); transform: scale(1.02); }
@@ -1491,9 +1552,14 @@
       .ofov-solo { background: #4f9eff; }
       #ofov-filtersToggle[aria-expanded="true"] { background: #4f9eff; }
 
+      /* Same height as .ofov-actionBtn (2.2rem = 0.4rem padding + 0.68rem
+         text + border, at line-height 1) so a small button never reads as a
+         different control size than the row of action buttons above it. */
       .ofov-smallBtn {
+        height: 2.2rem;
         background: #0d1017; color: #fff; border: 1px solid rgba(255,255,255,0.14);
-        border-radius: 0.4rem; padding: 0.35rem 0.7rem; font-size: 0.68rem; font-weight: 700;
+        border-radius: var(--ofov-radius-btn); padding: 0 0.7rem;
+        font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold);
         text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer;
         transition: filter 0.15s ease;
       }
@@ -1539,48 +1605,48 @@
         display: flex; align-items: center; justify-content: space-between;
         padding: 0.5rem 0.6rem; flex-shrink: 0;
         border-bottom: 1px solid rgba(255,255,255,0.08);
-        font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); text-transform: uppercase;
         letter-spacing: 0.05em; color: rgba(255,255,255,0.7);
       }
       .ofov-sidePanelHeaderBtns { display: flex; gap: 0.3rem; }
       .ofov-iconBtn {
         background: transparent; border: 1px solid rgba(255,255,255,0.16);
-        color: #fff; border-radius: 0.3rem; width: 1.35rem; height: 1.35rem;
-        font-size: 0.7rem; line-height: 1; cursor: pointer;
+        color: #fff; border-radius: var(--ofov-radius-badge); width: 1.35rem; height: 1.35rem;
+        font-size: var(--ofov-fs-sm); line-height: 1; cursor: pointer;
         display: flex; align-items: center; justify-content: center; flex-shrink: 0;
       }
       .ofov-iconBtn:hover { filter: brightness(1.3); }
       .ofov-sidePanelBody { padding: 0.65rem; overflow-y: auto; }
 
       /* --- TrackerFront profile/stats panel --- */
-      .ofov-tfEmpty { color: rgba(255,255,255,0.45); font-size: 0.68rem; line-height: 1.4; }
+      .ofov-tfEmpty { color: rgba(255,255,255,0.45); font-size: var(--ofov-fs-sm); line-height: 1.4; }
       .ofov-tfHeader { display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.35rem; }
       .ofov-tfRankBadge {
-        color: #06120f; font-size: 0.62rem; font-weight: 800;
+        color: #06120f; font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-bold);
         text-transform: uppercase; letter-spacing: 0.04em;
-        padding: 0.15rem 0.4rem; border-radius: 0.25rem;
+        padding: var(--ofov-pad-badge); border-radius: var(--ofov-radius-badge);
       }
-      .ofov-tfVerified { color: #4ade80; font-weight: 800; font-size: 0.75rem; }
-      .ofov-tfClan { color: rgba(255,255,255,0.5); font-size: 0.62rem; font-weight: 700; }
-      .ofov-tfRR { color: #fff; font-size: 1.05rem; font-weight: 800; }
-      .ofov-tfRRMax { color: rgba(255,255,255,0.4); font-size: 0.7rem; font-weight: 600; }
+      .ofov-tfVerified { color: #4ade80; font-weight: var(--ofov-fw-bold); font-size: var(--ofov-fs-md); }
+      .ofov-tfClan { color: rgba(255,255,255,0.5); font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-bold); }
+      .ofov-tfRR { color: #fff; font-size: var(--ofov-fs-xl); font-weight: var(--ofov-fw-black); }
+      .ofov-tfRRMax { color: rgba(255,255,255,0.4); font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-regular); }
       .ofov-sparkline { width: 100%; height: 1.75rem; margin: 0.3rem 0; display: block; }
       .ofov-sparkline path { fill: none; stroke: #4f9eff; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
-      .ofov-tfMeta { color: rgba(255,255,255,0.6); font-size: 0.68rem; margin-top: 0.15rem; }
+      .ofov-tfMeta { color: rgba(255,255,255,0.6); font-size: var(--ofov-fs-sm); margin-top: 0.15rem; }
       .ofov-tfMeta strong { color: #fff; }
-      .ofov-tfStreak { font-size: 0.68rem; font-weight: 700; margin-top: 0.4rem; }
+      .ofov-tfStreak { font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold); margin-top: 0.4rem; }
       .ofov-tfStreak.ofov-tfWin { color: #4ade80; }
       .ofov-tfStreak.ofov-tfLoss { color: #f87171; }
       .ofov-tfGames { display: flex; flex-direction: column; gap: 0.3rem; }
       .ofov-tfGame {
         display: flex; align-items: center; gap: 0.35rem;
         background: #0d1017; border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 0.35rem; padding: 0.3rem 0.4rem; font-size: 0.66rem;
+        border-radius: var(--ofov-radius-btn); padding: 0.3rem 0.4rem; font-size: var(--ofov-fs-sm);
       }
       .ofov-tfResult {
-        flex-shrink: 0; width: 1.1rem; height: 1.1rem; border-radius: 0.25rem;
+        flex-shrink: 0; width: 1.1rem; height: 1.1rem; border-radius: var(--ofov-radius-badge);
         display: flex; align-items: center; justify-content: center;
-        font-weight: 800; font-size: 0.62rem; color: #06120f;
+        font-weight: var(--ofov-fw-bold); font-size: var(--ofov-fs-xs); color: #06120f;
       }
       .ofov-tfGame.ofov-tfWin .ofov-tfResult { background: #4ade80; }
       .ofov-tfGame.ofov-tfLoss .ofov-tfResult { background: #f87171; }
@@ -1588,7 +1654,7 @@
         flex: 1 1 auto; min-width: 0; color: rgba(255,255,255,0.75);
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
-      .ofov-tfDelta { flex-shrink: 0; color: rgba(255,255,255,0.5); font-weight: 700; }
+      .ofov-tfDelta { flex-shrink: 0; color: rgba(255,255,255,0.5); font-weight: var(--ofov-fw-bold); }
 
       .ofov-filtersRow {
         display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; align-items: flex-start;
@@ -1596,12 +1662,15 @@
       .ofov-field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 7rem; flex: 1 1 7rem; }
       .ofov-fieldGrow { flex: 1 1 10rem; }
       .ofov-field label {
-        font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); text-transform: uppercase;
         letter-spacing: 0.03em; color: rgba(255,255,255,0.55);
       }
+      /* Every text input/select/dropdown-trigger in the filters panel shares
+         this same padding/radius/size — a field reads as the same kind of
+         control no matter which of the three it happens to be. */
       .ofov-field select, .ofov-field input {
         background: #0d1017; color: #fff; border: 1px solid rgba(255,255,255,0.14);
-        border-radius: 0.35rem; padding: 0.35rem 0.45rem; font-size: 0.74rem;
+        border-radius: var(--ofov-radius-btn); padding: var(--ofov-pad-field); font-size: var(--ofov-fs-md);
       }
       .ofov-field select:focus, .ofov-field input:focus { outline: 1px solid #4f9eff; }
 
@@ -1613,7 +1682,8 @@
       .ofov-msTrigger {
         display: block; width: 100%; text-align: left;
         background: #0d1017; color: #fff; border: 1px solid rgba(255,255,255,0.14);
-        border-radius: 0.35rem; padding: 0.35rem 0.45rem; font-size: 0.74rem; cursor: pointer;
+        border-radius: var(--ofov-radius-btn); padding: var(--ofov-pad-field);
+        font-size: var(--ofov-fs-md); cursor: pointer;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       .ofov-msTrigger:hover { filter: brightness(1.25); }
@@ -1621,20 +1691,20 @@
       .ofov-msList {
         position: absolute; top: calc(100% + 0.25rem); left: 0; right: 0; z-index: 50;
         max-height: 14rem; overflow-y: auto;
-        background: #0d1017; border: 1px solid rgba(255,255,255,0.2); border-radius: 0.4rem;
+        background: #0d1017; border: 1px solid rgba(255,255,255,0.2); border-radius: var(--ofov-radius-btn);
         padding: 0.3rem;
         box-shadow: 0 10px 24px rgba(0,0,0,0.45);
       }
       .ofov-msItem {
         display: flex; align-items: center; gap: 0.4rem;
-        padding: 0.3rem 0.4rem; border-radius: 0.25rem; cursor: pointer;
-        font-size: 0.72rem; color: #fff;
+        padding: 0.3rem 0.4rem; border-radius: var(--ofov-radius-badge); cursor: pointer;
+        font-size: var(--ofov-fs-md); color: #fff;
       }
       .ofov-msItem:hover { background: rgba(255,255,255,0.1); }
       .ofov-msItem input[type="checkbox"] { flex-shrink: 0; }
 
       .ofov-modSectionLabel {
-        font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); text-transform: uppercase;
         letter-spacing: 0.05em; color: rgba(255,255,255,0.5);
         margin: 0.6rem 0 0.4rem;
       }
@@ -1650,7 +1720,7 @@
       }
       .ofov-details > summary {
         cursor: pointer; list-style: none;
-        font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); text-transform: uppercase;
         letter-spacing: 0.05em; color: rgba(255,255,255,0.7);
       }
       .ofov-details > summary::-webkit-details-marker { display: none; }
@@ -1659,17 +1729,17 @@
       .ofov-details[open] > summary { margin-bottom: 0.5rem; }
       .ofov-modBox {
         background: #0d1017; border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 0.4rem; padding: 0.4rem 0.5rem;
+        border-radius: var(--ofov-radius-btn); padding: 0.4rem 0.5rem;
       }
       .ofov-modTitle {
-        font-size: 0.68rem; color: rgba(255,255,255,0.75); margin-bottom: 0.3rem;
+        font-size: var(--ofov-fs-sm); font-weight: var(--ofov-fw-bold); color: rgba(255,255,255,0.75); margin-bottom: 0.3rem;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       .ofov-triBtns { display: flex; gap: 0.25rem; }
       .ofov-triBtn {
         flex: 1; background: #0d1017; color: rgba(255,255,255,0.6);
-        border: 1px solid rgba(255,255,255,0.1); border-radius: 0.3rem;
-        font-size: 0.62rem; font-weight: 800; padding: 0.2rem 0; cursor: pointer;
+        border: 1px solid rgba(255,255,255,0.1); border-radius: var(--ofov-radius-badge);
+        font-size: var(--ofov-fs-xs); font-weight: var(--ofov-fw-black); padding: 0.2rem 0; cursor: pointer;
       }
       .ofov-triBtn:hover { filter: brightness(1.3); }
       .ofov-triBtn.active[data-val="or"] { background: #4f9eff; color: #fff; border-color: #4f9eff; }
