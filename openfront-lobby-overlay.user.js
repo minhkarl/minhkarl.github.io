@@ -1165,7 +1165,12 @@
          edge, so it reads as a panel built into the page rather than a
          card floating on top of it. */
       .ofov-filtersPanel {
-        position: fixed; top: 4rem; right: 0; bottom: 1rem; z-index: 40000;
+        position: fixed; z-index: 40000;
+        /* 4.5rem below the top nav matches news-box's own offset above
+           (same "clears the nav bar" measurement); the bottom clearance is
+           taller to clear the game's own "OpenFront on Steam" promo banner
+           plus the page footer beneath it, not just a small margin. */
+        top: 4.5rem; right: 0; bottom: 6rem;
         width: min(26rem, calc(100vw - 2rem));
         background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1); border-right: none;
         border-radius: 0.75rem 0 0 0.75rem; padding: 0.8rem;
