@@ -1010,13 +1010,8 @@
       }
 
       #ofov-root { width: 100%; }
-      .ofov-layout { display: flex; align-items: flex-start; gap: 0.8rem; }
-      .ofov-main { flex: 1 1 auto; min-width: 0; }
       #ofov-grid {
         display: grid;
-        /* auto-fit (not a fixed column count) so this reflows on its own
-           width — the grid narrows when the filters sidebar opens beside it,
-           not just on viewport size. */
         grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
         gap: 0.6rem;
         align-items: start;
@@ -1161,16 +1156,20 @@
       }
       .ofov-smallBtn:hover { filter: brightness(1.2); }
 
-      /* Laid out as a normal flex sibling of .ofov-main (see .ofov-layout)
-         rather than a floating/positioned popover — same background/border
-         as the rest of the overlay's own chrome (.ofov-colHeader etc.) so it
-         reads as part of the page instead of a hovering box on top of it. */
+      /* This overlay lives in a narrow left-hand column (the lobby-card
+         list sits in a strip beside the game's own full-screen map), so
+         laying the panel out as a flex sibling of the grid — sharing that
+         same narrow column's width — left too little room for either.
+         Docked to the actual right edge of the screen instead: no shadow
+         and only the inner corners rounded, flush against the viewport
+         edge, so it reads as a panel built into the page rather than a
+         card floating on top of it. */
       .ofov-filtersPanel {
-        flex: 0 0 24rem;
-        max-width: calc(100vw - 2rem);
-        background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 0.75rem; padding: 0.8rem;
-        max-height: 80vh; overflow-y: auto;
+        position: fixed; top: 4rem; right: 0; bottom: 1rem; z-index: 40000;
+        width: min(26rem, calc(100vw - 2rem));
+        background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1); border-right: none;
+        border-radius: 0.75rem 0 0 0.75rem; padding: 0.8rem;
+        overflow-y: auto;
       }
       .ofov-filtersRow {
         display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.6rem; align-items: flex-start;
@@ -1242,18 +1241,14 @@
     const root = document.createElement("div");
     root.id = "ofov-root";
     root.innerHTML = `
-      <div class="ofov-layout">
-        <div class="ofov-main">
-          <div id="ofov-grid"></div>
-          <div class="ofov-actions">
-            <button class="ofov-actionBtn ofov-solo" data-action="solo">Solo</button>
-            <button class="ofov-actionBtn" data-action="create">Create Lobby</button>
-            <button class="ofov-actionBtn" data-action="ranked">Ranked</button>
-            <button type="button" id="ofov-filtersToggle" class="ofov-actionBtn" aria-expanded="false">Filters</button>
-          </div>
-        </div>
-        <div id="ofov-filtersPanel" class="ofov-filtersPanel" hidden>${buildFiltersPanelHtml()}</div>
+      <div id="ofov-grid"></div>
+      <div class="ofov-actions">
+        <button class="ofov-actionBtn ofov-solo" data-action="solo">Solo</button>
+        <button class="ofov-actionBtn" data-action="create">Create Lobby</button>
+        <button class="ofov-actionBtn" data-action="ranked">Ranked</button>
+        <button type="button" id="ofov-filtersToggle" class="ofov-actionBtn" aria-expanded="false">Filters</button>
       </div>
+      <div id="ofov-filtersPanel" class="ofov-filtersPanel" hidden>${buildFiltersPanelHtml()}</div>
     `;
 
     const filtersPanel = root.querySelector("#ofov-filtersPanel");
