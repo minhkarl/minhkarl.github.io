@@ -9,27 +9,57 @@
 // @require      https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/modifier-labels.js
 // @updateURL    https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js
 // @downloadURL  https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js
-// @grant        unsafeWindow
+// @grant        none
 // ==/UserScript==
 
 (function () {
   "use strict";
 
-  // Tampermonkey (at least on current Chrome/MV3) runs this script in its
-  // own sandboxed realm (visible in DevTools as the socket's stack frame
-  // pointing at "userscript.html" instead of the page's own bundle) even
-  // with a plain @match/@grant none, so `new WebSocket(...)` opens the
-  // handshake as that sandbox document rather than as openfront.io itself —
-  // OpenFront's server then treats it like a connection from an unrelated
-  // origin and refuses it, while the page's own identical-looking socket
-  // (opened from its real document) is accepted. unsafeWindow is Tampermonkey's
-  // reference to the real page's window, so grabbing WebSocket off it opens
-  // the socket as the page genuinely would. Falls back to the bare global for
-  // any environment where unsafeWindow isn't injected (plain browser, or a
-  // Tampermonkey build that doesn't sandbox @grant none).
-  const PageWebSocket = typeof unsafeWindow !== "undefined" ? unsafeWindow.WebSocket : WebSocket;
+  // OpenFront's multi-server rollout (docs/MultiServer.md) means there is no
+  // fixed lobby host any more — window.BOOTSTRAP_CONFIG on the real client
+  // carries none of numWorkers/serverHost/cluster (confirmed live
+  // 2026-09-20: DevTools showed only gitCommit/assetManifest/cdnBase/gameEnv/
+  // jwtAudience/stripePublishableKey/turnstileSiteKey), so a page has to ask
+  // the same API the game's own ClientEnv/ServerList does: which servers
+  // exist right now, and how many workers each one runs. This is the actual
+  // fix for the "reconnecting forever" failure — a red herring earlier in
+  // this file's history briefly blamed a Tampermonkey sandbox/origin issue
+  // (@grant unsafeWindow), but every wss://openfront.io/w{N}/lobbies attempt
+  // was failing because openfront.io itself is no longer a real game server
+  // to connect to, not because of which realm the socket opened from.
+  //
+  // Cached briefly so a burst of reconnects doesn't refetch on every
+  // attempt; a server "draining" or "fenced" still serves a live lobby list
+  // even though it won't take a new game, so only "no servers at all" falls
+  // through to the pre-multi-server guess below.
+  const CLUSTER_LIST_URL = "https://api.openfront.io/cluster.json?site=openfront.io";
+  const SERVER_CACHE_MS = 30_000;
+  let serverCache = null; // { host, numWorkers, cachedAt }
 
-  const WORKER_POOL = ["w0", "w1", "w2", "w3", "w4"];
+  async function resolveServer() {
+    if (serverCache && Date.now() - serverCache.cachedAt < SERVER_CACHE_MS) {
+      return serverCache;
+    }
+    try {
+      const res = await fetch(CLUSTER_LIST_URL, { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error(`cluster.json responded ${res.status}`);
+      const data = await res.json();
+      const entries = Object.values(data?.servers || {});
+      const pick =
+        entries.find((s) => s?.state === "open") ||
+        entries.find((s) => s?.state !== "fenced") ||
+        entries[0];
+      if (!pick?.host || !pick.numWorkers) throw new Error("cluster.json had no usable server");
+      serverCache = { host: pick.host, numWorkers: pick.numWorkers, cachedAt: Date.now() };
+    } catch (e) {
+      console.error("[of-overlay] cluster.json lookup failed, falling back to openfront.io directly:", e);
+      // Last-resort guess matching this script's pre-multi-server behavior,
+      // for the (now unlikely) case the API itself is unreachable.
+      serverCache = { host: "openfront.io", numWorkers: 5, cachedAt: Date.now() };
+    }
+    return serverCache;
+  }
+
   // Hosted lobbies must join via join-lobby-modal.open({lobbyId}) with NO
   // lobbyInfo — JoinLobbyModal.onOpen() only calls handleUrlJoin() (which
   // dispatches the real join) when lobbyInfo is absent. Passing it up front
@@ -334,9 +364,10 @@
   const RECONNECT_MAX_MS = 30_000;
   let reconnectDelayMs = RECONNECT_BASE_MS;
 
-  function connect() {
-    const worker = WORKER_POOL[Math.floor(Math.random() * WORKER_POOL.length)];
-    const ws = new PageWebSocket(`wss://openfront.io/${worker}/lobbies`);
+  async function connect() {
+    const { host, numWorkers } = await resolveServer();
+    const worker = `w${Math.floor(Math.random() * numWorkers)}`;
+    const ws = new WebSocket(`wss://${host}/${worker}/lobbies`);
     ws.binaryType = "arraybuffer";
 
     ws.onopen = () => {

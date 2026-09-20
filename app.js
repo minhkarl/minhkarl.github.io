@@ -312,10 +312,43 @@
         });
       }
       
-      // Each visitor gets a random lobby worker so load spreads across the
-      // five /lobbies sockets. Fixed for the life of the page.
-      const WORKER_POOL = ["w0", "w1", "w2", "w3", "w4"];
-      const WORKER = WORKER_POOL[Math.floor(Math.random() * WORKER_POOL.length)];
+      // OpenFront's multi-server rollout (docs/MultiServer.md) means there is
+      // no fixed lobby host any more — window.BOOTSTRAP_CONFIG on the real
+      // client carries none of numWorkers/serverHost/cluster (confirmed live
+      // 2026-09-20), so a page like this one has to ask the same API the
+      // game's own ClientEnv/ServerList does: which servers exist right now,
+      // and how many workers each one runs. Cached briefly so a burst of
+      // reconnects doesn't refetch on every attempt; a server "draining" or
+      // "fenced" still serves a live lobby list even though it won't take a
+      // new game, so only "no servers at all" falls through to the
+      // pre-multi-server guess below.
+      const CLUSTER_LIST_URL = "https://api.openfront.io/cluster.json?site=openfront.io";
+      const SERVER_CACHE_MS = 30_000;
+      let serverCache = null; // { host, numWorkers, cachedAt }
+
+      async function resolveServer() {
+        if (serverCache && Date.now() - serverCache.cachedAt < SERVER_CACHE_MS) {
+          return serverCache;
+        }
+        try {
+          const res = await fetch(CLUSTER_LIST_URL, { headers: { Accept: "application/json" } });
+          if (!res.ok) throw new Error(`cluster.json responded ${res.status}`);
+          const data = await res.json();
+          const entries = Object.values(data?.servers || {});
+          const pick =
+            entries.find((s) => s?.state === "open") ||
+            entries.find((s) => s?.state !== "fenced") ||
+            entries[0];
+          if (!pick?.host || !pick.numWorkers) throw new Error("cluster.json had no usable server");
+          serverCache = { host: pick.host, numWorkers: pick.numWorkers, cachedAt: Date.now() };
+        } catch (e) {
+          console.error("[lobbies] cluster.json lookup failed, falling back to openfront.io directly:", e);
+          // Last-resort guess matching this page's pre-multi-server behavior,
+          // for the (now unlikely) case the API itself is unreachable.
+          serverCache = { host: "openfront.io", numWorkers: 5, cachedAt: Date.now() };
+        }
+        return serverCache;
+      }
 
       const els = {
         status: $("status"),
@@ -377,6 +410,10 @@
         staleTimer: null,
         connectTimeout: null,
         snapshotTimer: null,
+        // Bumped on every connect() call; an in-flight resolveServer() from a
+        // superseded call checks this before opening a socket, so a rapid
+        // reconnect/refresh can't race a slow one into opening two sockets.
+        connectGeneration: 0,
         lastMessageAt: 0,
         lastDataAt: 0,
         lastFullMessageAt: 0,
@@ -1855,12 +1892,22 @@
       function connect() {
         clearReconnectTimers();
         closeCurrentSocket();
+        setStatus("Connecting…", "is-connecting");
 
-        const url = `wss://openfront.io/${WORKER}/lobbies`;
+        const generation = ++state.connectGeneration;
+        resolveServer().then(({ host, numWorkers }) => {
+          // A newer connect() (reconnect, refreshConnection) already
+          // superseded this one while the lookup was in flight.
+          if (state.connectGeneration !== generation) return;
+          openSocket(host, numWorkers);
+        });
+      }
+
+      function openSocket(host, numWorkers) {
+        const worker = `w${Math.floor(Math.random() * numWorkers)}`;
+        const url = `wss://${host}/${worker}/lobbies`;
         const openedForThisConnectionAt = Date.now();
 
-        setStatus("Connecting…", "is-connecting");
-      
         const ws = new WebSocket(url);
         // The game now sends zbin binary frames (see lobby-wire.js).
         ws.binaryType = "arraybuffer";
