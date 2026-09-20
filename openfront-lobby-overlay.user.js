@@ -1792,11 +1792,15 @@
 
       /* The relocated flag/username/verified row (see relocateIdentityBar)
          — its own Tailwind classes assume the wide top-strip row it used to
-         sit in, which a ~14rem sidebar can't give it, so its layout is
-         forced into a plain vertical stack here regardless of what those
-         classes say. Best-effort: this component's internal shadow-DOM-free
-         markup wasn't designed for this width, so it may still need a
-         follow-up tweak once seen live. */
+         sit in, so its layout is forced into a vertical stack here instead.
+         username-input's own internal template (UsernameInput.ts) sizes its
+         name text with h-full against its OWN host element's height, not the
+         row's — forcing that host to height:auto (an earlier version of
+         this rule) starves that percentage chain and is what was actually
+         truncating the shown name to one or two letters, not the width.
+         Giving each element the same fixed height its Tailwind classes
+         already ask for elsewhere (44px) instead of auto keeps that chain
+         intact while still stacking them. */
       .ofov-identitySlot {
         padding: 0.6rem 0.6rem 0; flex-shrink: 0;
         border-bottom: 1px solid rgba(255,255,255,0.08);
@@ -1810,8 +1814,9 @@
       .ofov-identitySlot flag-input,
       .ofov-identitySlot username-input,
       .ofov-identitySlot cosmetics-input {
+        display: block !important;
         width: 100% !important; max-width: none !important;
-        height: auto !important; max-height: none !important;
+        height: 2.75rem !important; max-height: none !important;
       }
 
       .ofov-rankedSection {
