@@ -9,11 +9,25 @@
 // @require      https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/modifier-labels.js
 // @updateURL    https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js
 // @downloadURL  https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js
-// @grant        none
+// @grant        unsafeWindow
 // ==/UserScript==
 
 (function () {
   "use strict";
+
+  // Tampermonkey (at least on current Chrome/MV3) runs this script in its
+  // own sandboxed realm (visible in DevTools as the socket's stack frame
+  // pointing at "userscript.html" instead of the page's own bundle) even
+  // with a plain @match/@grant none, so `new WebSocket(...)` opens the
+  // handshake as that sandbox document rather than as openfront.io itself —
+  // OpenFront's server then treats it like a connection from an unrelated
+  // origin and refuses it, while the page's own identical-looking socket
+  // (opened from its real document) is accepted. unsafeWindow is Tampermonkey's
+  // reference to the real page's window, so grabbing WebSocket off it opens
+  // the socket as the page genuinely would. Falls back to the bare global for
+  // any environment where unsafeWindow isn't injected (plain browser, or a
+  // Tampermonkey build that doesn't sandbox @grant none).
+  const PageWebSocket = typeof unsafeWindow !== "undefined" ? unsafeWindow.WebSocket : WebSocket;
 
   const WORKER_POOL = ["w0", "w1", "w2", "w3", "w4"];
   // Hosted lobbies must join via join-lobby-modal.open({lobbyId}) with NO
@@ -322,7 +336,7 @@
 
   function connect() {
     const worker = WORKER_POOL[Math.floor(Math.random() * WORKER_POOL.length)];
-    const ws = new WebSocket(`wss://openfront.io/${worker}/lobbies`);
+    const ws = new PageWebSocket(`wss://openfront.io/${worker}/lobbies`);
     ws.binaryType = "arraybuffer";
 
     ws.onopen = () => {
