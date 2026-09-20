@@ -7,6 +7,7 @@
 // @run-at       document-idle
 // @require      https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/lobby-wire.js
 // @require      https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/modifier-labels.js
+// @require      https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/lobby-filters.js
 // @updateURL    https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js
 // @downloadURL  https://raw.githubusercontent.com/minhkarl/minhkarl.github.io/main/openfront-lobby-overlay.user.js
 // @grant        none
@@ -71,6 +72,11 @@
     { key: "hosted", label: "Custom", dot: "#f472b6", source: "hosted" },
   ];
 
+  // Filter/sort matching rules live in lobby-filters.js (@require above) —
+  // shared with index.html's own filter panel so a saved profile or a filter
+  // choice behaves identically in both places.
+  const LF = window.OpenFrontLobbyFilters;
+
   const state = {
     games: { ffa: [], team: [], special: [], hosted: [] },
     byId: new Map(),
@@ -84,7 +90,41 @@
     metaEls: new Map(),
     serverTime: undefined,
     serverTimeCapturedAt: undefined,
+    filters: LF.defaultFilters(),
+    tri: LF.initTriState(),
+    activeProfiles: new Set(),
+    profileSelectionOrder: [],
+    // True while a saved profile's values are being written into the form —
+    // suppresses the "editing manually clears active profiles" rule so
+    // selecting a profile doesn't immediately deselect itself.
+    applyingProfile: false,
   };
+
+  const PROFILE_STORAGE_KEY = "ofovLobbyProfiles";
+  const PROFILE_ACTIVE_STORAGE_KEY = "ofovLobbyActiveProfiles";
+
+  const TEAM_FILTER_OPTIONS = [
+    { value: "any", label: "All" },
+    { value: "format:Duos", label: "Duos (2 per team)" },
+    { value: "format:Trios", label: "Trios (3 per team)" },
+    { value: "format:Quads", label: "Quads (4 per team)" },
+    { value: "teams:2", label: "2 teams" },
+    { value: "teams:3", label: "3 teams" },
+    { value: "teams:4", label: "4 teams" },
+    { value: "teams:5", label: "5 teams" },
+    { value: "teams:6", label: "6 teams" },
+    { value: "teams:7", label: "7 teams" },
+    { value: "teams:8", label: "8 teams" },
+  ];
+
+  const SORT_OPTIONS = [
+    { value: "starts_asc", label: "Starts Soonest" },
+    { value: "players_desc", label: "Players ↓" },
+    { value: "players_asc", label: "Players ↑" },
+    { value: "maxPlayers_desc", label: "Max Players ↓" },
+    { value: "maxPlayers_asc", label: "Max Players ↑" },
+    { value: "map_asc", label: "Map A→Z" },
+  ];
 
   // Full snapshots (the only source of serverTime) arrive well under once a
   // second, so extrapolate "now" from elapsed time; past this cutoff, stop
@@ -219,6 +259,363 @@
     `;
   }
 
+  // --- Filters/profiles: matching rules come from lobby-filters.js; this
+  // section is just storage + the DOM form that edits state.filters/tri. ---
+
+  function getStoredProfiles() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveStoredProfiles(profiles) {
+    try { localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profiles)); } catch {}
+  }
+  function loadActiveProfileNames() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PROFILE_ACTIVE_STORAGE_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.filter((n) => typeof n === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveActiveProfileNames() {
+    try { localStorage.setItem(PROFILE_ACTIVE_STORAGE_KEY, JSON.stringify(state.profileSelectionOrder)); } catch {}
+  }
+
+  function normalizeProfileFilters(value) {
+    value = value || {};
+    return {
+      type: value.type || "all",
+      hideEmpty: value.hideEmpty === true,
+      teamFilters: Array.isArray(value.teamFilters) ? value.teamFilters.filter((v) => v && v !== "any") : [],
+      sort: value.sort || "starts_asc",
+      minJoined: value.minJoined ?? null,
+      maxJoined: value.maxJoined ?? null,
+      maxPlayersEq: value.maxPlayersEq ?? null,
+      minMaxPlayers: value.minMaxPlayers ?? null,
+      maxMaxPlayers: value.maxMaxPlayers ?? null,
+      minPerTeam: value.minPerTeam ?? null,
+      maxPerTeam: value.maxPerTeam ?? null,
+    };
+  }
+
+  function normalizeProfileTri(rawTri) {
+    const tri = new Map();
+    if (Array.isArray(rawTri)) {
+      for (const entry of rawTri) {
+        if (Array.isArray(entry) && entry.length >= 2 && entry[0]) {
+          tri.set(entry[0], LF.normalizeModifierRule(entry[1]));
+        }
+      }
+    }
+    return tri;
+  }
+
+  // Every active profile is OR'd together: a lobby matching any one of them
+  // passes, same as index.html's own multi-profile behavior.
+  function getActiveProfileDefinitions() {
+    if (state.activeProfiles.size === 0) return [];
+    return getStoredProfiles()
+      .filter((p) => p?.name && state.activeProfiles.has(p.name))
+      .map((p) => ({ name: p.name, filters: normalizeProfileFilters(p.filters), tri: normalizeProfileTri(p.filters?.tri) }));
+  }
+
+  function getProfileSnapshot() {
+    return { ...state.filters, tri: Array.from(state.tri.entries()) };
+  }
+
+  function matchesCurrentFilters(g) {
+    const profiles = getActiveProfileDefinitions();
+    if (profiles.length === 0) return LF.matchAllFilters(g, state.filters, state.tri);
+    return profiles.some((profile) => LF.matchAllFilters(g, profile.filters, profile.tri));
+  }
+
+  // Filters/sorts across all four server buckets together (a "Teams" type
+  // filter, say, should empty the FFA/Special/Custom columns too, not just
+  // hide within each), then re-buckets survivors back into their original
+  // column so render() can keep drawing four columns.
+  function getVisibleGames() {
+    const flattened = [];
+    for (const key of Object.keys(state.games)) {
+      for (const raw of state.games[key] || []) {
+        flattened.push(LF.normalizeGame(raw, key));
+      }
+    }
+    const matching = flattened.filter((g) => matchesCurrentFilters(g));
+    const sorted = LF.sortGames(matching, state.filters.sort);
+
+    const buckets = { ffa: [], team: [], special: [], hosted: [] };
+    for (const g of sorted) {
+      if (buckets[g.rawType]) buckets[g.rawType].push(g.raw);
+    }
+    return buckets;
+  }
+
+  function triButtonGroup(id) {
+    const current = LF.normalizeModifierRule(state.tri.get(id));
+    const makeButton = (value, text, title) =>
+      `<button type="button" class="ofov-triBtn ${current === value ? "active" : ""}" data-tri="${escapeHtml(id)}" data-val="${escapeHtml(value)}" title="${escapeHtml(title)}" aria-pressed="${current === value ? "true" : "false"}">${escapeHtml(text)}</button>`;
+    return `<div class="ofov-triBtns">
+      ${makeButton(LF.TRI.OR, "OR", "Match if at least one selected OR modifier is present")}
+      ${makeButton(LF.TRI.AND, "AND", "Require every selected AND modifier")}
+      ${makeButton(LF.TRI.NOT, "NOT", "Exclude lobbies containing this modifier")}
+    </div>`;
+  }
+
+  function modifierGroupsHtml(filters) {
+    return filters.map((f) => `<div class="ofov-modBox"><div class="ofov-modTitle">${escapeHtml(f.label)}</div>${triButtonGroup(f.id)}</div>`).join("");
+  }
+
+  function buildFiltersPanelHtml() {
+    const f = state.filters;
+    const teamOptionsHtml = TEAM_FILTER_OPTIONS.map(
+      (o) => `<option value="${o.value}"${f.teamFilters.includes(o.value) || (f.teamFilters.length === 0 && o.value === "any") ? " selected" : ""}>${escapeHtml(o.label)}</option>`,
+    ).join("");
+    const sortOptionsHtml = SORT_OPTIONS.map(
+      (o) => `<option value="${o.value}"${f.sort === o.value ? " selected" : ""}>${escapeHtml(o.label)}</option>`,
+    ).join("");
+
+    return `
+      <div class="ofov-filtersRow">
+        <div class="ofov-field">
+          <label>Type</label>
+          <select id="ofov-f-type">
+            <option value="all"${f.type === "all" ? " selected" : ""}>All</option>
+            <option value="ffa"${f.type === "ffa" ? " selected" : ""}>FFA</option>
+            <option value="team"${f.type === "team" ? " selected" : ""}>Teams</option>
+            <option value="humansVsNations"${f.type === "humansVsNations" ? " selected" : ""}>Humans vs Nations</option>
+          </select>
+        </div>
+        <div class="ofov-field">
+          <label>Teams (ctrl/cmd-click for multiple)</label>
+          <select id="ofov-f-teams" multiple size="4">${teamOptionsHtml}</select>
+        </div>
+        <div class="ofov-field">
+          <label>Hide empty</label>
+          <select id="ofov-f-hideEmpty">
+            <option value="no"${!f.hideEmpty ? " selected" : ""}>No</option>
+            <option value="yes"${f.hideEmpty ? " selected" : ""}>Yes</option>
+          </select>
+        </div>
+        <div class="ofov-field">
+          <label>Sort by</label>
+          <select id="ofov-f-sort">${sortOptionsHtml}</select>
+        </div>
+      </div>
+
+      <div class="ofov-filtersRow">
+        <div class="ofov-field"><label>Min joined</label><input id="ofov-f-minJoined" type="number" placeholder="any" value="${f.minJoined ?? ""}"></div>
+        <div class="ofov-field"><label>Max joined</label><input id="ofov-f-maxJoined" type="number" placeholder="any" value="${f.maxJoined ?? ""}"></div>
+        <div class="ofov-field"><label>Capacity =</label><input id="ofov-f-maxPlayersEq" type="number" placeholder="any" value="${f.maxPlayersEq ?? ""}"></div>
+        <div class="ofov-field"><label>Min capacity</label><input id="ofov-f-minMaxPlayers" type="number" placeholder="any" value="${f.minMaxPlayers ?? ""}"></div>
+        <div class="ofov-field"><label>Max capacity</label><input id="ofov-f-maxMaxPlayers" type="number" placeholder="any" value="${f.maxMaxPlayers ?? ""}"></div>
+        <div class="ofov-field"><label>Min per team</label><input id="ofov-f-minPerTeam" type="number" placeholder="any" value="${f.minPerTeam ?? ""}"></div>
+        <div class="ofov-field"><label>Max per team</label><input id="ofov-f-maxPerTeam" type="number" placeholder="any" value="${f.maxPerTeam ?? ""}"></div>
+        <div class="ofov-field"><label>&nbsp;</label><button type="button" id="ofov-f-reset" class="ofov-smallBtn">Reset all</button></div>
+      </div>
+
+      <div class="ofov-modSectionLabel">Modifier logic</div>
+      <div class="ofov-modGrid">${modifierGroupsHtml([...LF.boolFilters, ...LF.numExact])}</div>
+
+      <div class="ofov-modSectionLabel">Custom Lobby</div>
+      <div class="ofov-modGrid">${modifierGroupsHtml(LF.privateBoolFilters)}</div>
+
+      <div class="ofov-modSectionLabel">Profiles</div>
+      <div class="ofov-filtersRow">
+        <div class="ofov-field ofov-fieldGrow"><label>Profile name</label><input id="ofov-f-profileName" type="text" placeholder="e.g. Big team games"></div>
+        <div class="ofov-field ofov-fieldGrow"><label>Active profiles (ctrl/cmd-click for multiple)</label><select id="ofov-f-profileSelect" multiple size="3"></select></div>
+        <div class="ofov-field"><label>&nbsp;</label><button type="button" id="ofov-f-profileSave" class="ofov-smallBtn">Save</button></div>
+        <div class="ofov-field"><label>&nbsp;</label><button type="button" id="ofov-f-profileDelete" class="ofov-smallBtn">Delete</button></div>
+      </div>
+    `;
+  }
+
+  function readFiltersFromForm(panel) {
+    const val = (id) => panel.querySelector(`#${id}`)?.value;
+    const teamsSelect = panel.querySelector("#ofov-f-teams");
+    const teamFilters = teamsSelect
+      ? Array.from(teamsSelect.selectedOptions).map((o) => o.value).filter((v) => v !== "any")
+      : [];
+
+    return {
+      type: val("ofov-f-type") || "all",
+      hideEmpty: val("ofov-f-hideEmpty") === "yes",
+      teamFilters,
+      sort: val("ofov-f-sort") || "starts_asc",
+      minJoined: LF.parseNum(val("ofov-f-minJoined")),
+      maxJoined: LF.parseNum(val("ofov-f-maxJoined")),
+      maxPlayersEq: LF.parseNum(val("ofov-f-maxPlayersEq")),
+      minMaxPlayers: LF.parseNum(val("ofov-f-minMaxPlayers")),
+      maxMaxPlayers: LF.parseNum(val("ofov-f-maxMaxPlayers")),
+      minPerTeam: LF.parseNum(val("ofov-f-minPerTeam")),
+      maxPerTeam: LF.parseNum(val("ofov-f-maxPerTeam")),
+    };
+  }
+
+  // Editing anything by hand exits "profile mode" (matches index.html) —
+  // otherwise a tweak would look ignored, since active profiles still OR in
+  // their own saved values on top of whatever you just typed.
+  function leaveProfileModeOnManualChange(panel) {
+    if (state.applyingProfile || state.activeProfiles.size === 0) return;
+    state.activeProfiles.clear();
+    state.profileSelectionOrder = [];
+    saveActiveProfileNames();
+    const select = panel.querySelector("#ofov-f-profileSelect");
+    if (select) Array.from(select.options).forEach((o) => { o.selected = false; });
+  }
+
+  function refreshProfileSelect(panel) {
+    const select = panel.querySelector("#ofov-f-profileSelect");
+    if (!select) return;
+    const profiles = getStoredProfiles().filter((p) => p?.name).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const validNames = new Set(profiles.map((p) => p.name));
+    state.activeProfiles = new Set(Array.from(state.activeProfiles).filter((n) => validNames.has(n)));
+    state.profileSelectionOrder = state.profileSelectionOrder.filter((n) => state.activeProfiles.has(n));
+    select.innerHTML = profiles
+      .map((p) => `<option value="${escapeHtml(p.name)}"${state.activeProfiles.has(p.name) ? " selected" : ""}>${escapeHtml(p.name)}</option>`)
+      .join("");
+    saveActiveProfileNames();
+  }
+
+  // Rebuilds the whole panel from state.filters/tri, which wipes whatever the
+  // fresh markup doesn't already know — profileName included — so a loaded
+  // profile's name is passed through explicitly rather than set on the
+  // about-to-be-replaced input beforehand.
+  function applyProfileSnapshot(rawFilters, panel, profileName) {
+    if (!rawFilters) return;
+    state.applyingProfile = true;
+    try {
+      state.filters = normalizeProfileFilters(rawFilters);
+      state.tri = normalizeProfileTri(rawFilters.tri);
+      panel.innerHTML = buildFiltersPanelHtml();
+      wireFiltersPanel(panel);
+      refreshProfileSelect(panel);
+      const select = panel.querySelector("#ofov-f-profileSelect");
+      if (select) Array.from(select.options).forEach((o) => { o.selected = state.activeProfiles.has(o.value); });
+      const nameInput = panel.querySelector("#ofov-f-profileName");
+      if (nameInput && profileName) nameInput.value = profileName;
+    } finally {
+      state.applyingProfile = false;
+    }
+    render(estimatedServerTime());
+  }
+
+  function saveCurrentProfile(panel) {
+    const nameInput = panel.querySelector("#ofov-f-profileName");
+    const name = nameInput?.value.trim();
+    if (!name) {
+      alert("Name the profile first.");
+      return;
+    }
+
+    const profiles = getStoredProfiles().filter((p) => p?.name !== name);
+    profiles.push({ name, filters: getProfileSnapshot(), updatedAt: Date.now() });
+    saveStoredProfiles(profiles);
+    state.activeProfiles = new Set([name]);
+    state.profileSelectionOrder = [name];
+    refreshProfileSelect(panel);
+    render(estimatedServerTime());
+  }
+
+  function deleteSelectedProfile(panel) {
+    const nameInput = panel.querySelector("#ofov-f-profileName");
+    const typedName = nameInput?.value.trim();
+    const names = typedName ? [typedName] : Array.from(state.activeProfiles);
+    if (names.length === 0) {
+      alert("Select a saved profile first.");
+      return;
+    }
+
+    const remove = new Set(names);
+    const profiles = getStoredProfiles();
+    const next = profiles.filter((p) => !remove.has(p?.name));
+    if (next.length === profiles.length) {
+      alert("That profile does not exist.");
+      return;
+    }
+
+    saveStoredProfiles(next);
+    for (const n of remove) state.activeProfiles.delete(n);
+    state.profileSelectionOrder = state.profileSelectionOrder.filter((n) => !remove.has(n));
+    if (nameInput) nameInput.value = "";
+    refreshProfileSelect(panel);
+    render(estimatedServerTime());
+  }
+
+  function wireFiltersPanel(panel) {
+    panel.querySelectorAll("select, input[type=number]").forEach((el) => {
+      if (el.id === "ofov-f-profileSelect") return; // wired separately below
+      const handler = () => {
+        leaveProfileModeOnManualChange(panel);
+        state.filters = readFiltersFromForm(panel);
+        render(estimatedServerTime());
+      };
+      el.addEventListener("change", handler);
+      if (el.tagName === "INPUT") el.addEventListener("input", handler);
+    });
+
+    panel.querySelectorAll("[data-tri][data-val]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        leaveProfileModeOnManualChange(panel);
+        const id = btn.getAttribute("data-tri");
+        const value = btn.getAttribute("data-val");
+        const current = LF.normalizeModifierRule(state.tri.get(id));
+        const next = current === value ? LF.TRI.NONE : value;
+        state.tri.set(id, next);
+        panel.querySelectorAll(`[data-tri="${CSS.escape(id)}"]`).forEach((b) => {
+          b.classList.toggle("active", next !== LF.TRI.NONE && b.getAttribute("data-val") === next);
+        });
+        render(estimatedServerTime());
+      });
+    });
+
+    panel.querySelector("#ofov-f-reset")?.addEventListener("click", () => {
+      state.filters = LF.defaultFilters();
+      state.tri = LF.initTriState();
+      state.activeProfiles.clear();
+      state.profileSelectionOrder = [];
+      saveActiveProfileNames();
+      panel.innerHTML = buildFiltersPanelHtml();
+      wireFiltersPanel(panel);
+      refreshProfileSelect(panel);
+      render(estimatedServerTime());
+    });
+
+    const profileSelect = panel.querySelector("#ofov-f-profileSelect");
+    profileSelect?.addEventListener("change", () => {
+      const selected = Array.from(profileSelect.selectedOptions).map((o) => o.value);
+      state.activeProfiles = new Set(selected);
+      state.profileSelectionOrder = selected;
+      saveActiveProfileNames();
+
+      const lastName = selected[selected.length - 1];
+      const lastProfile = lastName ? getStoredProfiles().find((p) => p?.name === lastName) : null;
+      if (lastProfile) {
+        applyProfileSnapshot(lastProfile.filters, panel, lastProfile.name);
+      } else {
+        render(estimatedServerTime());
+      }
+    });
+
+    panel.querySelector("#ofov-f-profileSave")?.addEventListener("click", () => saveCurrentProfile(panel));
+    panel.querySelector("#ofov-f-profileDelete")?.addEventListener("click", () => deleteSelectedProfile(panel));
+  }
+
+  function initProfilesAndFilters(panel) {
+    state.profileSelectionOrder = loadActiveProfileNames();
+    state.activeProfiles = new Set(state.profileSelectionOrder);
+    refreshProfileSelect(panel);
+
+    const lastName = state.profileSelectionOrder.at(-1);
+    const lastProfile = lastName ? getStoredProfiles().find((p) => p?.name === lastName) : null;
+    if (lastProfile) {
+      applyProfileSnapshot(lastProfile.filters, panel, lastProfile.name);
+    }
+  }
+
   // Shows the fade only when there's actually more below the visible area —
   // a column that fits without scrolling gets no fade at all.
   function updateColumnFade(colCardsEl) {
@@ -237,8 +634,9 @@
       firstRects.set(card.dataset.gameId, card.getBoundingClientRect());
     });
 
+    const visible = getVisibleGames();
     const html = CATEGORIES.map(({ key, label, dot, source }) => {
-      const list = state.games[key] || [];
+      const list = visible[key] || [];
       const cards = list.length
         ? list
             .map((g) => {
@@ -709,6 +1107,63 @@
       .ofov-actionBtn:hover { filter: brightness(1.15); transform: scale(1.02); }
       .ofov-actionBtn:active { transform: scale(0.98); }
       .ofov-solo { background: #4f9eff; }
+
+      .ofov-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }
+      .ofov-smallBtn {
+        background: #1a1f2e; color: #fff; border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 0.4rem; padding: 0.4rem 0.8rem; font-size: 0.75rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer;
+        transition: filter 0.15s ease;
+      }
+      .ofov-smallBtn:hover { filter: brightness(1.2); }
+      #ofov-filtersToggle[aria-expanded="true"] { background: #4f9eff; }
+
+      .ofov-filtersPanel {
+        background: #12161f; border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 0.75rem; padding: 0.9rem; margin-bottom: 0.75rem;
+        max-height: 60vh; overflow-y: auto;
+      }
+      .ofov-filtersRow {
+        display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.75rem; align-items: flex-end;
+      }
+      .ofov-field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 8.5rem; }
+      .ofov-fieldGrow { flex: 1 1 14rem; }
+      .ofov-field label {
+        font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.04em; color: rgba(255,255,255,0.55);
+      }
+      .ofov-field select, .ofov-field input {
+        background: #1a1f2e; color: #fff; border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 0.35rem; padding: 0.4rem 0.5rem; font-size: 0.78rem;
+      }
+      .ofov-field select:focus, .ofov-field input:focus { outline: 1px solid #4f9eff; }
+      .ofov-modSectionLabel {
+        font-size: 0.68rem; font-weight: 800; text-transform: uppercase;
+        letter-spacing: 0.05em; color: rgba(255,255,255,0.5);
+        margin: 0.75rem 0 0.45rem; padding-top: 0.5rem;
+        border-top: 1px solid rgba(255,255,255,0.08);
+      }
+      .ofov-modGrid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.5rem;
+      }
+      .ofov-modBox {
+        background: #1a1f2e; border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 0.4rem; padding: 0.4rem 0.5rem;
+      }
+      .ofov-modTitle {
+        font-size: 0.68rem; color: rgba(255,255,255,0.75); margin-bottom: 0.3rem;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .ofov-triBtns { display: flex; gap: 0.25rem; }
+      .ofov-triBtn {
+        flex: 1; background: #0d1017; color: rgba(255,255,255,0.6);
+        border: 1px solid rgba(255,255,255,0.1); border-radius: 0.3rem;
+        font-size: 0.62rem; font-weight: 800; padding: 0.2rem 0; cursor: pointer;
+      }
+      .ofov-triBtn:hover { filter: brightness(1.3); }
+      .ofov-triBtn.active[data-val="or"] { background: #4f9eff; color: #fff; border-color: #4f9eff; }
+      .ofov-triBtn.active[data-val="and"] { background: #4ade80; color: #06240f; border-color: #4ade80; }
+      .ofov-triBtn.active[data-val="not"] { background: #f87171; color: #2a0808; border-color: #f87171; }
     `;
     document.head.appendChild(style);
   }
@@ -723,6 +1178,10 @@
     const root = document.createElement("div");
     root.id = "ofov-root";
     root.innerHTML = `
+      <div class="ofov-toolbar">
+        <button type="button" id="ofov-filtersToggle" class="ofov-smallBtn" aria-expanded="false">Filters</button>
+      </div>
+      <div id="ofov-filtersPanel" class="ofov-filtersPanel" hidden>${buildFiltersPanelHtml()}</div>
       <div id="ofov-grid"></div>
       <div class="ofov-actions">
         <button class="ofov-actionBtn ofov-solo" data-action="solo">Solo</button>
@@ -730,6 +1189,18 @@
         <button class="ofov-actionBtn" data-action="ranked">Ranked</button>
       </div>
     `;
+
+    const filtersPanel = root.querySelector("#ofov-filtersPanel");
+    wireFiltersPanel(filtersPanel);
+    initProfilesAndFilters(filtersPanel);
+
+    root.querySelector("#ofov-filtersToggle")?.addEventListener("click", (e) => {
+      const btn = e.currentTarget;
+      const willOpen = filtersPanel.hidden;
+      filtersPanel.hidden = !willOpen;
+      btn.setAttribute("aria-expanded", String(willOpen));
+    });
+
     function joinFromCard(card) {
       const lobby = state.byId.get(card.dataset.gameId);
       if (!lobby) return;
