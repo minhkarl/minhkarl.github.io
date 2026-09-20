@@ -1061,11 +1061,6 @@
         font-size: 0.62rem; font-weight: 800; color: #fff;
         text-transform: uppercase; letter-spacing: 0.05em;
         background: rgba(0,0,0,0.6); padding: 0.2rem 0.55rem; border-radius: 999px;
-        animation: ofovMoreHintBounce 1.6s ease-in-out infinite;
-      }
-      @keyframes ofovMoreHintBounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(3px); }
       }
       .ofov-colEmpty {
         color: rgba(255,255,255,0.4); font-size: 0.75rem;
@@ -1170,12 +1165,13 @@
       .ofov-smallBtn:hover { filter: brightness(1.2); }
       #ofov-filtersToggle[aria-expanded="true"] { background: #4f9eff; }
 
-      /* A flyout anchored to the right of #ofov-root (not below it) — this
-         sits in a narrow column with its own lobby cards/buttons below the
-         toggle, so dropping the panel down would cover them; opening
-         sideways into the open space next to the column avoids that. */
+      /* position:fixed (not absolute) and positioned via JS against the
+         viewport (see positionFiltersPanel in mount()) rather than CSS
+         anchoring to #ofov-root — that sits in a narrow column, and an
+         ancestor of it clips an absolutely-positioned child that pokes out
+         past its bounds. Fixed positioning escapes that clipping entirely. */
       .ofov-filtersPanel {
-        position: absolute; top: 0; left: 100%; margin-left: 0.6rem; z-index: 25;
+        position: fixed; z-index: 100000;
         width: min(26rem, calc(100vw - 2rem));
         background: #12161f; border: 1px solid rgba(255,255,255,0.14);
         border-radius: 0.75rem; padding: 0.8rem;
@@ -1269,10 +1265,34 @@
     wireFiltersPanel(filtersPanel);
     initProfilesAndFilters(filtersPanel);
 
+    // Runs each time the panel opens (its size can change — a modifier
+    // section expanding, a longer profile list) rather than once, so it's
+    // always positioned against the button's current spot and the current
+    // viewport size instead of a stale measurement.
+    function positionFiltersPanel() {
+      const btnRect = filtersToggle.getBoundingClientRect();
+      const margin = 8;
+      const panelWidth = filtersPanel.offsetWidth;
+      const panelHeight = filtersPanel.offsetHeight;
+
+      let left = btnRect.right + margin;
+      if (left + panelWidth > window.innerWidth - margin) {
+        left = Math.max(margin, btnRect.left - panelWidth - margin);
+      }
+      let top = btnRect.top;
+      if (top + panelHeight > window.innerHeight - margin) {
+        top = Math.max(margin, window.innerHeight - margin - panelHeight);
+      }
+
+      filtersPanel.style.left = `${left}px`;
+      filtersPanel.style.top = `${top}px`;
+    }
+
     filtersToggle?.addEventListener("click", () => {
       const willOpen = filtersPanel.hidden;
       filtersPanel.hidden = !willOpen;
       filtersToggle.setAttribute("aria-expanded", String(willOpen));
+      if (willOpen) positionFiltersPanel();
     });
     // Popover behavior: closes on an outside click or Escape, same pattern
     // as news-box's own dropdown below.
