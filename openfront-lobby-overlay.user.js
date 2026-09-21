@@ -1045,11 +1045,11 @@
       </div>
 
       <div class="ofov-filtersRow">
-        <div class="ofov-field ofov-fieldGrow">
+        <div class="ofov-field">
           <label>Teams</label>
           ${teamsDropdownHtml}
         </div>
-        <div class="ofov-field ofov-fieldGrow">
+        <div class="ofov-field">
           <label>Map</label>
           ${mapsDropdownHtml}
         </div>
@@ -1807,8 +1807,11 @@
         display: flex; flex-direction: column; gap: 0.5rem;
         /* Scales with viewport height so a tall window shows more cards
            before scrolling, clamped so a short window still gets a sane
-           minimum and a huge one doesn't run off the bottom of the page. */
-        max-height: clamp(18rem, 52vh, 40rem);
+           minimum and a huge one doesn't run off the bottom of the page.
+           Raised from clamp(18rem, 52vh, 40rem) — each card is ~8.5rem
+           including its gap, and the extra room here is worth roughly one
+           to two more cards before "Scroll for more" kicks in. */
+        max-height: clamp(22rem, 68vh, 48rem);
         overflow-y: auto; overflow-x: hidden; padding-bottom: 2px;
         /* Scrolling still works — only the native scrollbar track/thumb is
            hidden, since .ofov-moreHint is the intended "there's more" cue. */
@@ -1968,16 +1971,14 @@
 
       .ofov-sidePanel {
         position: fixed; z-index: 40000;
-        /* 4.5rem below the top nav matches news-box's own offset above.
-           height:auto + max-height (rather than a fixed top+bottom box) is
-           what actually fixes the panel stretching down into a big dead gap
-           whenever its content — the profile panel especially — is shorter
-           than the space available: it now only takes the room its content
-           needs, capped so long content still scrolls instead of running
-           into the game's "OpenFront on Steam" banner and the footer. */
-        top: 4.5rem;
-        max-height: calc(100vh - 10.5rem);
-        height: auto;
+        /* Full-height again (top+bottom, not height:auto) — with the panel
+           this transparent, filling the whole column between the nav bar
+           and the footer reads as a glass pane, not the dead empty block
+           auto-sizing was fixing back when this had a much more opaque
+           background. top is a bit past news-box's own 4.5rem offset per
+           request ("move it down a bit"); bottom still clears the game's
+           "OpenFront on Steam" banner and the footer beneath it. */
+        top: 5rem; bottom: 6rem;
         /* A fallback only — mount()'s syncSidePanelWidths() overrides this
            with an inline width sized to actually reach the lobby column
            flush (no gap), recomputed on resize since that column's own
