@@ -430,6 +430,15 @@
     slot.appendChild(identityRow);
   }
 
+  const ALERTS_STORAGE_KEY = "ofovLobbyAlertsEnabled";
+  function loadAlertsEnabled() {
+    try {
+      return localStorage.getItem(ALERTS_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  }
+
   const state = {
     games: { ffa: [], team: [], special: [], hosted: [] },
     byId: new Map(),
@@ -451,6 +460,19 @@
     // suppresses the "editing manually clears active profiles" rule so
     // selecting a profile doesn't immediately deselect itself.
     applyingProfile: false,
+    // --- "New match" alerts, ported from index.html's own app.js. ---
+    alertsEnabled: loadAlertsEnabled(),
+    // The matching-game-ID snapshot alerts compare each new one against —
+    // only IDs *added* since this snapshot count as "new". Reset whenever
+    // the active filters/profiles change so a filter tweak's own newly-
+    // matching lobbies don't read as a flood of "new" matches.
+    alertPrevIds: new Set(),
+    alertBaselineReady: false,
+    alertLastFilterKey: "",
+    audioCtx: null,
+    titleBlinkTimer: null,
+    titleBlinkStopTimer: null,
+    originalTitle: "",
   };
 
   const PROFILE_STORAGE_KEY = "ofovLobbyProfiles";
@@ -696,6 +718,176 @@
     return profiles.some(
       (profile) => LF.matchAllFilters(g, profile.filters, profile.tri) && matchesMapFilter(g, profile.filters.maps),
     );
+  }
+
+  // --- "New match" alerts — ported from index.html's own app.js so both
+  // surfaces behave the same way: a sound, a flashing toggle, a blinking
+  // page title, and (with permission) a desktop notification whenever a
+  // lobby that matches the current filters/profiles appears that wasn't
+  // there a moment ago. Hosted lobbies are excluded, same as app.js — those
+  // are player-created listings, not matchmaking games, so a host
+  // rehosting isn't a "new match" worth alerting on. ---
+
+  function getMatchingGamesFlat() {
+    const flattened = [];
+    for (const key of Object.keys(state.games)) {
+      for (const raw of state.games[key] || []) flattened.push(LF.normalizeGame(raw, key));
+    }
+    return flattened.filter((g) => g.rawType !== "hosted" && matchesCurrentFilters(g));
+  }
+
+  // Changes whenever the active filters/profiles do, so a filter edit's own
+  // newly-matching lobbies reset the baseline instead of alerting on all of
+  // them at once.
+  function getAlertFilterKey() {
+    const triEntries = Array.from(state.tri.entries()).sort(([a], [b]) => a.localeCompare(b));
+    const activeProfiles = Array.from(state.activeProfiles).sort();
+    return JSON.stringify({ activeProfiles, filters: state.filters, tri: triEntries });
+  }
+
+  function resetAlertBaseline() {
+    state.alertPrevIds = new Set(getMatchingGamesFlat().map((g) => String(g.id)));
+    state.alertBaselineReady = true;
+    state.alertLastFilterKey = getAlertFilterKey();
+  }
+
+  function updateAlertToggleUI() {
+    const btn = document.getElementById("ofov-alertToggle");
+    if (!btn) return;
+    btn.textContent = state.alertsEnabled ? "Alerts: On" : "Alerts: Off";
+    btn.classList.toggle("ofov-alertOn", state.alertsEnabled);
+  }
+
+  function stopTitleBlink() {
+    if (state.titleBlinkTimer) clearInterval(state.titleBlinkTimer);
+    if (state.titleBlinkStopTimer) clearTimeout(state.titleBlinkStopTimer);
+    state.titleBlinkTimer = null;
+    state.titleBlinkStopTimer = null;
+    document.title = state.originalTitle;
+  }
+
+  function startTitleBlink(count) {
+    stopTitleBlink();
+    let visible = false;
+    state.titleBlinkTimer = setInterval(() => {
+      visible = !visible;
+      document.title = visible ? `(${count}) New OpenFront match!` : state.originalTitle;
+    }, 800);
+    state.titleBlinkStopTimer = setTimeout(stopTitleBlink, 10_000);
+  }
+
+  // A plain two-tone beep via Web Audio — no audio asset to ship in a
+  // userscript, and this is exactly what app.js already uses.
+  function playAlertSound() {
+    if (!state.alertsEnabled) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = state.audioCtx || new AudioCtx();
+      state.audioCtx = ctx;
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.setValueAtTime(660, now + 0.13);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.38);
+    } catch {}
+  }
+
+  function flashAlertToggle() {
+    const btn = document.getElementById("ofov-alertToggle");
+    if (!btn) return;
+    btn.classList.remove("ofov-alertFlash");
+    void btn.offsetWidth;
+    btn.classList.add("ofov-alertFlash");
+    setTimeout(() => btn.classList.remove("ofov-alertFlash"), 4500);
+  }
+
+  // No join-by-URL path exists here (joining goes through the in-page
+  // modal/event, not a navigable link) — clicking the notification just
+  // brings the tab forward instead of also attempting to join.
+  function showDesktopNotification(newGames) {
+    if (!state.alertsEnabled) return;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const first = newGames[0];
+    const cfg = first.cfg || {};
+    const maxPlayers = typeof cfg.maxPlayers === "number" ? `/${cfg.maxPlayers}` : "";
+    const body =
+      newGames.length === 1
+        ? `${cfg.gameMap ?? "Unknown map"} · ${first.joined ?? 0}${maxPlayers} players`
+        : `${newGames.length} new lobbies match your filters`;
+    try {
+      const n = new Notification("OpenFront lobby match", { body, tag: "ofov-lobby-match", renotify: true });
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
+    } catch {}
+  }
+
+  async function setAlertsEnabled(enabled) {
+    state.alertsEnabled = enabled;
+    try {
+      localStorage.setItem(ALERTS_STORAGE_KEY, String(enabled));
+    } catch {}
+    updateAlertToggleUI();
+
+    if (enabled) {
+      resetAlertBaseline();
+      try {
+        state.audioCtx = state.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (state.audioCtx.state === "suspended") await state.audioCtx.resume();
+      } catch {}
+      if ("Notification" in window && Notification.permission === "default") {
+        try {
+          await Notification.requestPermission();
+        } catch {}
+      }
+    } else {
+      stopTitleBlink();
+    }
+  }
+
+  // Called once per "full" snapshot (see connect()) — comparing against the
+  // last snapshot rather than every render() call, which also fires for
+  // pure filter/UI edits the tri-state guard below already treats as a
+  // baseline reset rather than a source of new matches.
+  function handleNewMatchingGames() {
+    const filterKey = getAlertFilterKey();
+    const matching = getMatchingGamesFlat();
+    const currentIds = new Set(matching.map((g) => String(g.id)));
+
+    if (!state.alertsEnabled) {
+      state.alertPrevIds = currentIds;
+      state.alertBaselineReady = true;
+      state.alertLastFilterKey = filterKey;
+      return;
+    }
+    if (!state.alertBaselineReady || state.alertLastFilterKey !== filterKey) {
+      state.alertPrevIds = currentIds;
+      state.alertBaselineReady = true;
+      state.alertLastFilterKey = filterKey;
+      return;
+    }
+
+    const newGames = matching.filter((g) => !state.alertPrevIds.has(String(g.id)));
+    state.alertPrevIds = currentIds;
+    state.alertLastFilterKey = filterKey;
+    if (newGames.length === 0) return;
+
+    flashAlertToggle();
+    playAlertSound();
+    startTitleBlink(newGames.length);
+    showDesktopNotification(newGames);
   }
 
   // The full map list, same source lobby-wire.js's decoder uses (kept in
@@ -969,6 +1161,12 @@
     } finally {
       state.applyingProfile = false;
     }
+    // Not resetAlertBaseline() here — initProfilesAndFilters() also calls
+    // this, at page load, before any lobby snapshot has arrived; resetting
+    // there would mark the (empty) baseline "ready" early, and the first
+    // real snapshot would then read every already-matching lobby as newly
+    // matched. The genuine user-driven call site (the profile dropdown's
+    // onChange, below) resets it itself instead.
     render(estimatedServerTime());
   }
 
@@ -986,6 +1184,7 @@
     state.activeProfiles = new Set([name]);
     state.profileSelectionOrder = [name];
     refreshProfileSelect(panel);
+    resetAlertBaseline();
     render(estimatedServerTime());
   }
 
@@ -1011,6 +1210,7 @@
     state.profileSelectionOrder = state.profileSelectionOrder.filter((n) => !remove.has(n));
     if (nameInput) nameInput.value = "";
     refreshProfileSelect(panel);
+    resetAlertBaseline();
     render(estimatedServerTime());
   }
 
@@ -1018,6 +1218,7 @@
     const onManualFilterChange = () => {
       leaveProfileModeOnManualChange(panel);
       state.filters = readFiltersFromForm(panel);
+      resetAlertBaseline();
       render(estimatedServerTime());
     };
 
@@ -1039,7 +1240,9 @@
         const lastProfile = lastName ? getStoredProfiles().find((p) => p?.name === lastName) : null;
         if (lastProfile) {
           applyProfileSnapshot(lastProfile.filters, panel, lastProfile.name);
+          resetAlertBaseline();
         } else {
+          resetAlertBaseline();
           render(estimatedServerTime());
         }
       },
@@ -1056,6 +1259,7 @@
         panel.querySelectorAll(`[data-tri="${CSS.escape(id)}"]`).forEach((b) => {
           b.classList.toggle("active", next !== LF.TRI.NONE && b.getAttribute("data-val") === next);
         });
+        resetAlertBaseline();
         render(estimatedServerTime());
       });
     });
@@ -1069,6 +1273,7 @@
       panel.innerHTML = buildFiltersPanelHtml();
       wireFiltersPanel(panel);
       refreshProfileSelect(panel);
+      resetAlertBaseline();
       render(estimatedServerTime());
     });
 
@@ -1362,6 +1567,7 @@
         for (const key of Object.keys(state.games)) stabilizeStartsAt(state.games[key]);
         reindex();
         render(state.serverTime);
+        handleNewMatchingGames();
         return;
       }
 
@@ -1735,6 +1941,18 @@
          louder than a plain "Reset" shortcut warrants. */
       .ofov-smallBtnGhost { height: auto; background: transparent; border-color: rgba(255,255,255,0.2); padding: 0.25rem 0.6rem; }
       .ofov-smallBtnGhost:hover { filter: none; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.06); }
+      /* "New match" alerts toggle — ported from index.html's own app.js,
+         same on/flash visual language (a blue glow while enabled, a pulsing
+         ring when a new match just fired). */
+      .ofov-alertOn {
+        border-color: rgba(79,158,255,0.7); background: rgba(79,158,255,0.18); color: #fff;
+        box-shadow: 0 0 0 1px rgba(79,158,255,0.25), 0 0 18px rgba(79,158,255,0.18);
+      }
+      .ofov-alertFlash { animation: ofovAlertPulse 700ms ease-in-out 0s 6; }
+      @keyframes ofovAlertPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(79,158,255,0); }
+        50% { box-shadow: 0 0 0 5px rgba(79,158,255,0.35); }
+      }
 
       /* The lobby browser (everything #ofov-root sits beside) lives in
          OpenFront's own narrow left-hand column next to its full-screen map
@@ -1750,27 +1968,32 @@
 
       .ofov-sidePanel {
         position: fixed; z-index: 40000;
-        /* 4.5rem below the top nav matches news-box's own offset above; the
-           bottom clearance clears the game's "OpenFront on Steam" promo
-           banner plus the page footer beneath it. */
-        top: 4.5rem; bottom: 6rem;
+        /* 4.5rem below the top nav matches news-box's own offset above.
+           height:auto + max-height (rather than a fixed top+bottom box) is
+           what actually fixes the panel stretching down into a big dead gap
+           whenever its content — the profile panel especially — is shorter
+           than the space available: it now only takes the room its content
+           needs, capped so long content still scrolls instead of running
+           into the game's "OpenFront on Steam" banner and the footer. */
+        top: 4.5rem;
+        max-height: calc(100vh - 10.5rem);
+        height: auto;
         /* A fallback only — mount()'s syncSidePanelWidths() overrides this
            with an inline width sized to actually reach the lobby column
            flush (no gap), recomputed on resize since that column's own
            position isn't fixed either. This value only shows for the one
            frame before that first measurement lands. */
         width: min(20rem, 26vw);
-        /* Semi-translucent + blurred rather than a flat panel color, since
-           these now sit flush against the games instead of leaving their
-           own strip of visible map beside them — a solid block that wide
-           would hide too much of the game's own map background. */
-        background: linear-gradient(180deg, rgba(26,31,46,0.55), rgba(26,31,46,0.75));
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        /* Considerably more transparent than a typical panel — closer to a
+           tinted pane of glass than a card, so the game's own map stays
+           clearly visible behind it instead of being mostly hidden. */
+        background: linear-gradient(180deg, rgba(20,25,38,0.22), rgba(20,25,38,0.34));
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
         border: 1px solid rgba(255,255,255,0.1);
         display: flex; flex-direction: column;
         overflow: hidden;
-        transition: width 150ms ease;
+        transition: width 150ms ease, opacity 150ms ease;
       }
       #ofov-leftOuter { left: 0; border-left: none; border-radius: 0 0.9rem 0.9rem 0; }
       #ofov-filtersOuter {
@@ -1779,10 +2002,19 @@
       }
       /* Shrunk to a thin strip rather than removed outright — a quick way
          to reclaim screen space without losing the panel's state (open
-         dropdowns, scroll position, form values). */
-      .ofov-sidePanel.ofov-collapsed { width: 2.4rem; }
+         dropdowns, scroll position, form values). Only the profile panel
+         still works this way; see #ofov-filtersOuter.ofov-collapsed below
+         for why Filters doesn't. */
+      #ofov-leftOuter.ofov-collapsed { width: 2.4rem; }
       .ofov-sidePanel.ofov-collapsed .ofov-sidePanelBody,
       .ofov-sidePanel.ofov-collapsed .ofov-sidePanelHeader span { display: none; }
+      /* Filters hides via opacity only, at its full measured width — nothing
+         about its position or size changes, so toggling it never causes any
+         visible movement (the games column's own width isn't affected by
+         either panel's width to begin with, fixed-positioned as they are,
+         but the panel's own edge sliding in/out read as motion worth
+         avoiding here). */
+      #ofov-filtersOuter.ofov-collapsed { opacity: 0; pointer-events: none; }
 
       .ofov-sidePanelHeader {
         display: flex; align-items: center; justify-content: space-between;
@@ -2071,7 +2303,10 @@
         <aside id="ofov-filtersOuter" class="ofov-sidePanel">
           <div class="ofov-sidePanelHeader">
             <span>Filters</span>
-            <button type="button" id="ofov-f-resetTop" class="ofov-smallBtn ofov-smallBtnGhost">Reset</button>
+            <div class="ofov-sidePanelHeaderBtns">
+              <button type="button" id="ofov-alertToggle" class="ofov-smallBtn ofov-smallBtnGhost">Alerts: Off</button>
+              <button type="button" id="ofov-f-resetTop" class="ofov-smallBtn ofov-smallBtnGhost">Reset</button>
+            </div>
           </div>
           <div id="ofov-filtersPanel" class="ofov-sidePanelBody">${buildFiltersPanelHtml()}</div>
         </aside>
@@ -2091,6 +2326,16 @@
       filtersPanel.querySelector("#ofov-f-reset")?.click();
     });
 
+    // Reflects whatever loadAlertsEnabled() read from localStorage at
+    // startup — deliberately not routed through setAlertsEnabled() here,
+    // since that also (re-)requests notification permission and resets the
+    // alert baseline, neither of which a page load should trigger on its
+    // own behalf.
+    updateAlertToggleUI();
+    root.querySelector("#ofov-alertToggle")?.addEventListener("click", () => {
+      setAlertsEnabled(!state.alertsEnabled);
+    });
+
     // Both side panels are docked to the real viewport edges (see
     // injectStyle's comment on .ofov-sidePanel) but the lobby column they
     // flank isn't — it's centered/positioned by OpenFront's own layout, at
@@ -2103,24 +2348,22 @@
       if (!leftOuter.classList.contains("ofov-collapsed")) {
         leftOuter.style.width = `${Math.max(0, rect.left)}px`;
       }
-      if (!filtersOuter.classList.contains("ofov-collapsed")) {
-        filtersOuter.style.width = `${Math.max(0, window.innerWidth - rect.right)}px`;
-      }
+      // Filters keeps its full measured width even while "collapsed" now —
+      // it hides via opacity only (see injectStyle's comment on
+      // #ofov-filtersOuter.ofov-collapsed), so there's no separate
+      // collapsed-width state to skip measuring for.
+      filtersOuter.style.width = `${Math.max(0, window.innerWidth - rect.right)}px`;
     }
     window.addEventListener("resize", syncSidePanelWidths);
 
     // The filters column is a permanent part of the layout now (not a
-    // popover), so "collapsing" it just shrinks it to a thin strip instead
-    // of hiding/showing content — same idea as the left panel's own chevron.
-    // The inline width syncSidePanelWidths sets would otherwise outrank
-    // .ofov-collapsed's own width rule, so it's cleared on the way in and
-    // recomputed on the way back out.
+    // popover), so "collapsing" it just hides it in place (opacity) instead
+    // of hiding/showing content or changing its size — nothing about the
+    // panel's box ever moves when this is toggled.
     filtersToggle?.addEventListener("click", () => {
       const willExpand = filtersOuter.classList.contains("ofov-collapsed");
       filtersOuter.classList.toggle("ofov-collapsed", !willExpand);
       filtersToggle.setAttribute("aria-expanded", String(willExpand));
-      if (!willExpand) filtersOuter.style.width = "";
-      else syncSidePanelWidths();
     });
 
     leftCollapse?.addEventListener("click", () => {
@@ -2353,6 +2596,7 @@
       return;
     }
     started = true;
+    state.originalTitle = document.title;
     injectStyle();
     mount(gms);
     relocateNewsBox();
