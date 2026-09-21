@@ -884,13 +884,15 @@
         <div class="ofov-modGrid">${modifierGroupsHtml(LF.privateBoolFilters)}</div>
       </details>
 
-      <div class="ofov-modSectionLabel">Profiles</div>
-      <div class="ofov-filtersRow">
-        <div class="ofov-field ofov-fieldGrow"><label>Profile name</label><input id="ofov-f-profileName" type="text" placeholder="e.g. Big team games"></div>
-        <div class="ofov-field ofov-fieldGrow"><label>Active profiles</label>${multiSelectDropdownHtml("ofov-f-profileSelect", [], state.activeProfiles, "Manual filters")}</div>
-        <div class="ofov-field"><label>&nbsp;</label><button type="button" id="ofov-f-profileSave" class="ofov-smallBtn">Save</button></div>
-        <div class="ofov-field"><label>&nbsp;</label><button type="button" id="ofov-f-profileDelete" class="ofov-smallBtn">Delete</button></div>
-      </div>
+      <details class="ofov-details">
+        <summary>Profiles</summary>
+        <div class="ofov-filtersRow">
+          <div class="ofov-field ofov-fieldGrow"><label>Profile name</label><input id="ofov-f-profileName" type="text" placeholder="e.g. Big team games"></div>
+          <div class="ofov-field ofov-fieldGrow"><label>Active profiles</label>${multiSelectDropdownHtml("ofov-f-profileSelect", [], state.activeProfiles, "Manual filters")}</div>
+          <div class="ofov-field"><label>&nbsp;</label><button type="button" id="ofov-f-profileSave" class="ofov-smallBtn">Save</button></div>
+          <div class="ofov-field"><label>&nbsp;</label><button type="button" id="ofov-f-profileDelete" class="ofov-smallBtn">Delete</button></div>
+        </div>
+      </details>
     `;
   }
 
@@ -1728,6 +1730,11 @@
         transition: filter 0.15s ease;
       }
       .ofov-smallBtn:hover { filter: brightness(1.2); }
+      /* A quieter variant for a button that sits directly in a dark panel
+         header rather than in a filled row — a solid block there reads as
+         louder than a plain "Reset" shortcut warrants. */
+      .ofov-smallBtnGhost { height: auto; background: transparent; border-color: rgba(255,255,255,0.2); padding: 0.25rem 0.6rem; }
+      .ofov-smallBtnGhost:hover { filter: none; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.06); }
 
       /* The lobby browser (everything #ofov-root sits beside) lives in
          OpenFront's own narrow left-hand column next to its full-screen map
@@ -1747,11 +1754,19 @@
            bottom clearance clears the game's "OpenFront on Steam" promo
            banner plus the page footer beneath it. */
         top: 4.5rem; bottom: 6rem;
+        /* A fallback only — mount()'s syncSidePanelWidths() overrides this
+           with an inline width sized to actually reach the lobby column
+           flush (no gap), recomputed on resize since that column's own
+           position isn't fixed either. This value only shows for the one
+           frame before that first measurement lands. */
         width: min(20rem, 26vw);
-        /* A soft gradient over the flat panel color, and a bigger radius —
-           matches minhkarl.github.io's own .panel styling instead of the
-           flatter block look this started with. */
-        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)), #1a1f2e;
+        /* Semi-translucent + blurred rather than a flat panel color, since
+           these now sit flush against the games instead of leaving their
+           own strip of visible map beside them — a solid block that wide
+           would hide too much of the game's own map background. */
+        background: linear-gradient(180deg, rgba(26,31,46,0.55), rgba(26,31,46,0.75));
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         border: 1px solid rgba(255,255,255,0.1);
         display: flex; flex-direction: column;
         overflow: hidden;
@@ -2054,7 +2069,10 @@
         </div>
 
         <aside id="ofov-filtersOuter" class="ofov-sidePanel">
-          <div class="ofov-sidePanelHeader"><span>Filters</span></div>
+          <div class="ofov-sidePanelHeader">
+            <span>Filters</span>
+            <button type="button" id="ofov-f-resetTop" class="ofov-smallBtn ofov-smallBtnGhost">Reset</button>
+          </div>
           <div id="ofov-filtersPanel" class="ofov-sidePanelBody">${buildFiltersPanelHtml()}</div>
         </aside>
       </div>
@@ -2063,25 +2081,55 @@
     const filtersPanel = root.querySelector("#ofov-filtersPanel");
     const filtersOuter = root.querySelector("#ofov-filtersOuter");
     const filtersToggle = root.querySelector("#ofov-filtersToggle");
+    const leftOuter = root.querySelector("#ofov-leftOuter");
+    const leftCollapse = root.querySelector("#ofov-leftCollapse");
     wireFiltersPanel(filtersPanel);
     initProfilesAndFilters(filtersPanel);
+    // Delegates to the field further down rather than duplicating the reset
+    // logic — this is just a shortcut so resetting doesn't need a scroll.
+    root.querySelector("#ofov-f-resetTop")?.addEventListener("click", () => {
+      filtersPanel.querySelector("#ofov-f-reset")?.click();
+    });
+
+    // Both side panels are docked to the real viewport edges (see
+    // injectStyle's comment on .ofov-sidePanel) but the lobby column they
+    // flank isn't — it's centered/positioned by OpenFront's own layout, at
+    // whatever width that column currently is. Measuring #ofov-root's own
+    // rect (it fills that column, same as the grid) and sizing each panel
+    // to close the gap up to it is what actually gets them flush against
+    // the games instead of leaving a strip of bare map between.
+    function syncSidePanelWidths() {
+      const rect = root.getBoundingClientRect();
+      if (!leftOuter.classList.contains("ofov-collapsed")) {
+        leftOuter.style.width = `${Math.max(0, rect.left)}px`;
+      }
+      if (!filtersOuter.classList.contains("ofov-collapsed")) {
+        filtersOuter.style.width = `${Math.max(0, window.innerWidth - rect.right)}px`;
+      }
+    }
+    window.addEventListener("resize", syncSidePanelWidths);
 
     // The filters column is a permanent part of the layout now (not a
     // popover), so "collapsing" it just shrinks it to a thin strip instead
     // of hiding/showing content — same idea as the left panel's own chevron.
+    // The inline width syncSidePanelWidths sets would otherwise outrank
+    // .ofov-collapsed's own width rule, so it's cleared on the way in and
+    // recomputed on the way back out.
     filtersToggle?.addEventListener("click", () => {
       const willExpand = filtersOuter.classList.contains("ofov-collapsed");
       filtersOuter.classList.toggle("ofov-collapsed", !willExpand);
       filtersToggle.setAttribute("aria-expanded", String(willExpand));
+      if (!willExpand) filtersOuter.style.width = "";
+      else syncSidePanelWidths();
     });
 
-    const leftOuter = root.querySelector("#ofov-leftOuter");
-    const leftCollapse = root.querySelector("#ofov-leftCollapse");
     leftCollapse?.addEventListener("click", () => {
       const willExpand = leftOuter.classList.contains("ofov-collapsed");
       leftOuter.classList.toggle("ofov-collapsed", !willExpand);
       leftCollapse.setAttribute("aria-expanded", String(willExpand));
       leftCollapse.textContent = willExpand ? "‹" : "›";
+      if (!willExpand) leftOuter.style.width = "";
+      else syncSidePanelWidths();
     });
     mountTrackerFrontPanel(root.querySelector("#ofov-tfBody"), root.querySelector("#ofov-tfRefresh"));
 
@@ -2145,6 +2193,15 @@
       true,
     );
     gms.parentNode.insertBefore(root, gms);
+
+    // Only meaningful once root is actually attached — getBoundingClientRect
+    // on a detached node is all zeros, which would flash both panels to 0
+    // width before the very first measurement. The column's width can still
+    // settle a beat after that (web fonts, the map background finishing
+    // layout), hence the couple of delayed re-measures on top.
+    syncSidePanelWidths();
+    setTimeout(syncSidePanelWidths, 300);
+    setTimeout(syncSidePanelWidths, 1200);
   }
 
   // <news-box> ships CSS-hidden (see injectStyle) so it stops eating vertical
